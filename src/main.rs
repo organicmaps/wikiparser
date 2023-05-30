@@ -2,9 +2,7 @@
 //     pv ~/Downloads/enwiki-NS0-20230401-ENTERPRISE-HTML.json.tar.gz | tar xzO | cargo run --release > /dev/null
 
 use serde::Deserialize;
-use std::{
-    io::{self, stdin, BufRead, BufReader, Write},
-};
+use std::io::{self, stdin, BufRead, BufReader, Write};
 
 #[derive(Deserialize)]
 struct Page {
