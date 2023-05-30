@@ -1,0 +1,33 @@
+name: Continuous Integration
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+    name: cargo check/clippy/fmt/test
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - run: rustup toolchain install stable --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # bump this to invalidate build/dependency cache
+          prefix-key: "v0-rust"
+
+      - name: Check compilation
+        run: cargo check --verbose --locked
+      - name: Lint
+        run: cargo clippy
+      - name: Test
+        run: cargo test --verbose --locked
+      - name: Formatting
+        run: cargo fmt --verbose --check
