@@ -9,8 +9,6 @@ on:
 
 jobs:
   test:
-    strategy:
-      fail-fast: false
     name: cargo check/clippy/fmt/test
     runs-on: ubuntu-latest
 
