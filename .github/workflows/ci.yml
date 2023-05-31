@@ -1,6 +1,6 @@
 name: Continuous Integration
 
-on: [push, pull_request]
+on: pull_request
 
 jobs:
   test:
@@ -18,9 +18,9 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          # Bump this to manually invalidate the build/dependency cache
+          # Bump this to manually invalidate the build/dependency cache.
           # It is also keyed on the job, rustc version, Cargo.lock, and other
-          # values explained here: <https://github.com/Swatinem/rust-cache#cache-details>
+          # values explained here: https://github.com/Swatinem/rust-cache#cache-details
           prefix-key: "v0-rust"
 
       - name: Check compilation
