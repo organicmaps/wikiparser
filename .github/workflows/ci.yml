@@ -16,8 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - run: rustup toolchain install stable --profile minimal
-
       - uses: Swatinem/rust-cache@v2
         with:
           # bump this to invalidate build/dependency cache
