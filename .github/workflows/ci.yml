@@ -1,6 +1,11 @@
-name: Continuous Integration
+name: Rust Checks
 
-on: pull_request
+on:
+  pull_request:
+    paths-ignore:
+    - .gitignore
+    - LICENSE
+    - README.md
 
 jobs:
   test:
