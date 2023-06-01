@@ -1,0 +1,36 @@
+name: Rust Checks
+
+on:
+  pull_request:
+    paths-ignore:
+    - .gitignore
+    - LICENSE
+    - README.md
+
+jobs:
+  test:
+    name: cargo check/clippy/fmt/test
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Bump this to manually invalidate the build/dependency cache.
+          # It is also keyed on the job, rustc version, Cargo.lock, and other
+          # values explained here: https://github.com/Swatinem/rust-cache#cache-details
+          prefix-key: "v0-rust"
+
+      - name: Check compilation
+        run: cargo check --verbose --locked
+      - name: Lint
+        run: cargo clippy
+      - name: Test
+        run: cargo test --verbose --locked
+      - name: Formatting
+        run: cargo fmt --verbose --check
