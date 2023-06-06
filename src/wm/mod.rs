@@ -1,11 +1,5 @@
 //! Wikimedia types
-use std::{
-    collections::HashSet,
-    ffi::OsStr,
-    fs::{self},
-    num::ParseIntError,
-    str::FromStr,
-};
+use std::{collections::HashSet, ffi::OsStr, fs, num::ParseIntError, str::FromStr};
 
 use anyhow::{anyhow, bail, Context};
 
@@ -114,8 +108,8 @@ impl FromStr for WikidataQid {
 /// ```
 /// use om_wikiparser::wm::WikipediaTitleNorm;
 ///
-/// let url = WikipediaTitleNorm::from_url("https://en.wikipedia.org/wiki/Article_Title/").unwrap();
 /// let title = WikipediaTitleNorm::from_title("Article Title", "en");
+/// let url = WikipediaTitleNorm::from_url("https://en.wikipedia.org/wiki/Article_Title#Section").unwrap();
 /// assert_eq!(url, title);
 /// ```
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
@@ -136,19 +130,21 @@ impl WikipediaTitleNorm {
 
         let (subdomain, host) = url
             .host_str()
-            .ok_or(anyhow!("Expected host"))?
+            .ok_or_else(|| anyhow!("Expected host"))?
             .split_once('.')
-            .ok_or(anyhow!("Expected subdomain"))?;
+            .ok_or_else(|| anyhow!("Expected subdomain"))?;
         if host != "wikipedia.org" {
             bail!("Expected wikipedia.org for domain")
         }
         let lang = subdomain;
 
-        let mut paths = url.path_segments().ok_or(anyhow!("Expected path"))?;
+        let mut paths = url
+            .path_segments()
+            .ok_or_else(|| anyhow!("Expected path"))?;
 
         let root = paths
             .next()
-            .ok_or(anyhow!("Expected first segment in path"))?;
+            .ok_or_else(|| anyhow!("Expected first segment in path"))?;
 
         if root != "wiki" {
             bail!("Expected 'wiki' in path")
@@ -156,7 +152,7 @@ impl WikipediaTitleNorm {
 
         let title = paths
             .next()
-            .ok_or(anyhow!("Expected second segment in path"))?;
+            .ok_or_else(|| anyhow!("Expected second segment in path"))?;
         let title = urlencoding::decode(title)?;
 
         Ok(Self::from_title(&title, lang))
@@ -164,7 +160,7 @@ impl WikipediaTitleNorm {
 
     // en:Article Title
     fn _from_osm_tag(tag: &str) -> anyhow::Result<Self> {
-        let (lang, title) = tag.split_once(':').ok_or(anyhow!("Expected ':'"))?;
+        let (lang, title) = tag.split_once(':').ok_or_else(|| anyhow!("Expected ':'"))?;
 
         Ok(Self::from_title(title, lang))
     }
