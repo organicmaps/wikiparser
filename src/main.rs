@@ -10,7 +10,7 @@
 //     output_dir
 use std::{
     fs::File,
-    io::{stdin, BufRead, BufReader, Write},
+    io::{stdin, BufRead, Write},
     path::PathBuf,
 };
 
@@ -60,7 +60,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     info!("Processing dump");
-    let dump = BufReader::new(stdin());
+    let dump = stdin().lock();
 
     // TODO: compare different deserialization methods
     // docs warn against using a reader directly, and it's slower than tar can decompress the dump
