@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
     let mut input = String::new();
     stdin().read_to_string(&mut input)?;
 
-    let output = simplify(&input);
+    let output = simplify(&input, "en");
 
     stdout().write_all(output.as_bytes())?;
 

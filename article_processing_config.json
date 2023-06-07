@@ -1,0 +1,44 @@
+{
+  "sections_to_remove": {
+    "de": [
+      "Anmerkungen",
+      "Anmerkungen und Einzelnachweise",
+      "Einzelbelege",
+      "Einzelnachweise",
+      "Filme",
+      "Literatur",
+      "Siehe auch",
+      "Weblinks"
+    ],
+    "en": [
+      "Bibliography",
+      "External links",
+      "Further reading",
+      "References",
+      "See also",
+      "Sources"
+    ],
+    "es": [
+      "Enlaces externos",
+      "Referencias",
+      "Véase también",
+      "Vínculos de interés"
+    ],
+    "fr": [
+      "Articles connexes",
+      "Bibliographie",
+      "Lien externe",
+      "Liens externes",
+      "Notes et références",
+      "Références",
+      "Voir aussi"
+    ],
+    "ru": [
+      "Библиография",
+      "Литература",
+      "Примечания",
+      "См. также",
+      "Ссылки"
+    ]
+  }
+}

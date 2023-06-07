@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+// TODO: consolidate into single struct
 /// Deserialized Wikimedia Enterprise API Article
 ///
 /// For all available fields, see https://enterprise.wikimedia.com/docs/data-dictionary/
@@ -9,6 +10,7 @@ pub struct Page {
     // TODO: check if CoW has a performance impact
     pub name: String,
     pub date_modified: String,
+    pub in_language: Language,
     #[serde(default)]
     pub url: String,
     pub main_entity: Option<Wikidata>,
@@ -25,6 +27,8 @@ pub struct Wikidata {
 
 #[derive(Deserialize)]
 pub struct ArticleBody {
+    // TODO: look into RawValue to lazily parse/allocate this:
+    // https://docs.rs/serde_json/latest/serde_json/value/struct.RawValue.html
     pub html: String,
 }
 
@@ -33,4 +37,9 @@ pub struct ArticleBody {
 pub struct Redirect {
     pub url: String,
     pub name: String,
+}
+
+#[derive(Deserialize)]
+pub struct Language {
+    pub identifier: String,
 }

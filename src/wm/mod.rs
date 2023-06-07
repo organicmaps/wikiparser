@@ -58,15 +58,14 @@ pub fn is_wikipedia_match(
     titles: &HashSet<WikipediaTitleNorm>,
     page: &Page,
 ) -> Option<WikipediaTitleNorm> {
-    // TODO: handle multiple languages
-    let title = WikipediaTitleNorm::from_title(&page.name, "en");
+    let title = WikipediaTitleNorm::from_title(&page.name, &page.in_language.identifier);
 
     if titles.get(&title).is_some() {
         return Some(title);
     }
 
     for redirect in &page.redirects {
-        let title = WikipediaTitleNorm::from_title(&redirect.name, "en");
+        let title = WikipediaTitleNorm::from_title(&redirect.name, &page.in_language.identifier);
 
         if titles.get(&title).is_some() {
             return Some(title);
