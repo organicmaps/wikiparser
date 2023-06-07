@@ -9,9 +9,9 @@
 //     --wikipedia-urls /tmp/wikipedia_urls.txt \
 //     output_dir
 use std::{
-    fs::File,
+    fs::{create_dir, File},
     io::{stdin, BufRead, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::bail;
@@ -31,6 +31,37 @@ struct Args {
     wikidata_ids: Option<PathBuf>,
     #[arg(long)]
     wikipedia_urls: Option<PathBuf>,
+}
+
+fn write(dir: impl AsRef<Path>, page: Page) -> anyhow::Result<()> {
+    let Some(qid) = page.main_entity.map(|e| e.identifier) else {
+        // TODO: handle and still write
+        bail!("Page in list but without wikidata qid: {:?} ({})", page.name, page.url);
+    };
+
+    let mut filename = dir.as_ref().to_owned();
+    filename.push(qid);
+    filename.push(&page.in_language.identifier);
+    filename.set_extension("html");
+
+    debug!("{:?}: {:?}", page.name, filename);
+
+    if filename.exists() {
+        debug!("Exists, skipping");
+        return Ok(());
+    }
+
+    let subfolder = filename.parent().unwrap();
+    if !subfolder.exists() {
+        create_dir(subfolder)?;
+    }
+
+    let html = simplify(&page.article_body.html, &page.in_language.identifier);
+
+    let mut file = File::create(&filename)?;
+    file.write_all(html.as_bytes())?;
+
+    Ok(())
 }
 
 fn main() -> anyhow::Result<()> {
@@ -79,24 +110,9 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
-        let Some(qid) = page.main_entity.map(|e| e.identifier) else {
-            warn!("Page in list but without wikidata qid: {:?}", page.name);
-            continue;
-        };
-
-        let filename = args.output_dir.join(qid).with_extension("html");
-
-        debug!("{:?}: {:?}", page.name, filename);
-
-        if filename.exists() {
-            debug!("Exists, skipping");
-            continue;
+        if let Err(e) = write(&args.output_dir, page) {
+            error!("Error writing article: {}", e);
         }
-
-        let html = simplify(&page.article_body.html);
-
-        let mut file = File::create(filename)?;
-        file.write_all(html.as_bytes())?;
     }
 
     Ok(())
