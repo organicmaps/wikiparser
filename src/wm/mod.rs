@@ -1,5 +1,8 @@
 //! Wikimedia types
-use std::{collections::HashSet, ffi::OsStr, fs, num::ParseIntError, str::FromStr};
+use std::{
+    collections::HashSet, ffi::OsStr, fmt::Display, fs, num::ParseIntError, path::PathBuf,
+    str::FromStr,
+};
 
 use anyhow::{anyhow, bail, Context};
 
@@ -40,53 +43,6 @@ pub fn parse_wikipedia_file(
         .collect()
 }
 
-pub fn is_wikidata_match(ids: &HashSet<WikidataQid>, page: &Page) -> Option<WikidataQid> {
-    let Some(wikidata) = &page.main_entity else { return None;};
-    let wikidata_id = &wikidata.identifier;
-    let wikidata_id = match WikidataQid::from_str(wikidata_id) {
-        Ok(qid) => qid,
-        Err(e) => {
-            warn!(
-                "Could not parse QID for {:?}: {:?}: {:#}",
-                page.name, wikidata_id, e
-            );
-            return None;
-        }
-    };
-
-    ids.get(&wikidata_id).map(|_| wikidata_id)
-}
-
-pub fn is_wikipedia_match(
-    titles: &HashSet<WikipediaTitleNorm>,
-    page: &Page,
-) -> Option<WikipediaTitleNorm> {
-    match WikipediaTitleNorm::from_title(&page.name, &page.in_language.identifier) {
-        Err(e) => warn!("Could not parse title for {:?}: {:#}", page.name, e),
-        Ok(title) => {
-            if titles.get(&title).is_some() {
-                return Some(title);
-            }
-        }
-    }
-
-    for redirect in &page.redirects {
-        match WikipediaTitleNorm::from_title(&redirect.name, &page.in_language.identifier) {
-            Err(e) => warn!(
-                "Could not parse redirect title for {:?}: {:?}: {:#}",
-                page.name, redirect.name, e
-            ),
-            Ok(title) => {
-                if titles.get(&title).is_some() {
-                    return Some(title);
-                }
-            }
-        }
-    }
-
-    None
-}
-
 /// Wikidata QID/Q Number
 ///
 /// See https://www.wikidata.org/wiki/Wikidata:Glossary#QID
@@ -118,6 +74,23 @@ impl FromStr for WikidataQid {
     }
 }
 
+impl Display for WikidataQid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Q{}", self.0)
+    }
+}
+
+impl WikidataQid {
+    pub fn get_dir(&self, base: PathBuf) -> PathBuf {
+        let mut path = base;
+        path.push("wikidata");
+        // TODO: can use as_mut_os_string with 1.70.0
+        path.push(self.to_string());
+
+        path
+    }
+}
+
 /// Normalized wikipedia article title that can compare:
 /// - titles `Spatial Database`
 /// - urls `https://en.wikipedia.org/wiki/Spatial_database#Geodatabase`
@@ -132,6 +105,11 @@ impl FromStr for WikidataQid {
 ///
 /// assert!(WikipediaTitleNorm::from_url("https://en.wikipedia.org/not_a_wiki_page").is_err());
 /// assert!(WikipediaTitleNorm::from_url("https://wikidata.org/wiki/Q12345").is_err());
+///
+/// assert!(
+///     WikipediaTitleNorm::from_url("https://de.wikipedia.org/wiki/Breil/Brigels").unwrap() !=
+///     WikipediaTitleNorm::from_url("https://de.wikipedia.org/wiki/Breil").unwrap()
+/// );
 /// ```
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct WikipediaTitleNorm {
@@ -145,7 +123,7 @@ impl WikipediaTitleNorm {
         title.trim().replace(' ', "_")
     }
 
-    // https://en.wikipedia.org/wiki/Article_Title
+    // https://en.wikipedia.org/wiki/Article_Title/More_Title
     pub fn from_url(url: &str) -> anyhow::Result<Self> {
         let url = Url::parse(url.trim())?;
 
@@ -159,21 +137,17 @@ impl WikipediaTitleNorm {
         }
         let lang = subdomain;
 
-        let mut paths = url
-            .path_segments()
-            .ok_or_else(|| anyhow!("Expected path"))?;
+        let path = url.path();
 
-        let root = paths
-            .next()
-            .ok_or_else(|| anyhow!("Expected first segment in path"))?;
+        let (root, title) = path
+            .strip_prefix('/')
+            .unwrap_or(path)
+            .split_once('/')
+            .ok_or_else(|| anyhow!("Expected at least two segments in path"))?;
 
         if root != "wiki" {
-            bail!("Expected 'wiki' in path")
+            bail!("Expected 'wiki' as root path, got: {:?}", root)
         }
-
-        let title = paths
-            .next()
-            .ok_or_else(|| anyhow!("Expected second segment in path"))?;
         let title = urlencoding::decode(title)?;
 
         Self::from_title(&title, lang)
@@ -201,5 +175,15 @@ impl WikipediaTitleNorm {
         let name = Self::normalize_title(title);
         let lang = lang.to_owned();
         Ok(Self { name, lang })
+    }
+
+    pub fn get_dir(&self, base: PathBuf) -> PathBuf {
+        let mut path = base;
+        // TODO: can use as_mut_os_string with 1.70.0
+        path.push(format!("{}.wikipedia.org", self.lang));
+        path.push("wiki");
+        path.push(&self.name);
+
+        path
     }
 }

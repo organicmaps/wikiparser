@@ -1,27 +1,18 @@
-// Usage:
-//     # prep outputs from map generator
-//     cut -f 2 ~/Downloads/id_to_wikidata.csv > /tmp/wikidata_ids.txt
-//     tail -n +2 ~/Downloads/wiki_urls.txt | cut -f 3 > /tmp/wikipedia_urls.txt
-//     # feed gzipped tarfile
-//     pv ~/Downloads/enwiki-NS0-20230401-ENTERPRISE-HTML.json.tar.gz | tar xzO \
-//     | cargo run --release -- \
-//     --wikidata-ids /tmp/wikidata_ids.txt \
-//     --wikipedia-urls /tmp/wikipedia_urls.txt \
-//     output_dir
 use std::{
-    fs::{create_dir, File},
+    fs::{self, File},
     io::{stdin, BufRead, Write},
+    os::unix,
     path::{Path, PathBuf},
 };
 
-use anyhow::bail;
+use anyhow::{anyhow, bail, Context};
 use clap::Parser;
 #[macro_use]
 extern crate log;
 
 use om_wikiparser::{
     html::simplify,
-    wm::{is_wikidata_match, is_wikipedia_match, parse_wikidata_file, parse_wikipedia_file, Page},
+    wm::{parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
 };
 
 #[derive(Parser)]
@@ -33,33 +24,115 @@ struct Args {
     wikipedia_urls: Option<PathBuf>,
 }
 
-fn write(dir: impl AsRef<Path>, page: Page) -> anyhow::Result<()> {
-    let Some(qid) = page.main_entity.map(|e| e.identifier) else {
-        // TODO: handle and still write
-        bail!("Page in list but without wikidata qid: {:?} ({})", page.name, page.url);
+/// Determine the directory to write the article contents to, create it, and create any necessary symlinks to it.
+fn create_article_dir(
+    base: impl AsRef<Path>,
+    page: &Page,
+    redirects: impl IntoIterator<Item = WikipediaTitleNorm>,
+) -> anyhow::Result<PathBuf> {
+    let base = base.as_ref();
+    let mut redirects = redirects.into_iter();
+
+    let main_dir = match page.wikidata() {
+        None => {
+            // Write to wikipedia title directory.
+            // Prefer first redirect, fall back to page title if none exist
+            info!("Page without wikidata qid: {:?} ({})", page.name, page.url);
+            redirects
+                .next()
+                .or_else(|| match page.title() {
+                    Ok(title) => Some(title),
+                    Err(e) => {
+                        warn!("Unable to parse title for page {:?}: {:#}", page.name, e);
+                        None
+                    }
+                })
+                // hard fail when no titles can be parsed
+                .ok_or_else(|| anyhow!("No available titles for page {:?}", page.name))?
+                .get_dir(base.to_owned())
+        }
+        Some(qid) => {
+            // Otherwise use wikidata as main directory and symlink from wikipedia titles.
+            qid.get_dir(base.to_owned())
+        }
     };
 
-    let mut filename = dir.as_ref().to_owned();
-    filename.push(qid);
+    if main_dir.is_symlink() {
+        fs::remove_file(&main_dir)
+            .with_context(|| format!("removing old link for main directory {:?}", &main_dir))?;
+    }
+    fs::create_dir_all(&main_dir)
+        .with_context(|| format!("creating main directory {:?}", &main_dir))?;
+
+    // Write symlinks to main directory.
+    // TODO: Only write redirects that we care about.
+    for title in redirects {
+        let wikipedia_dir = title.get_dir(base.to_owned());
+
+        // Build required directory.
+        //
+        // Possible states from previous run:
+        // - Does not exist (and is not a symlink)
+        // - Exists, is a directory
+        // - Exists, is a valid symlink to correct location
+        // - Exists, is a valid symlink to incorrect location
+        if wikipedia_dir.exists() {
+            if wikipedia_dir.is_symlink() {
+                // Only replace if not valid
+                if fs::read_link(&wikipedia_dir)? == main_dir {
+                    continue;
+                }
+                fs::remove_file(&wikipedia_dir)?;
+            } else {
+                fs::remove_dir_all(&wikipedia_dir)?;
+            }
+        } else {
+            // titles can contain `/`, so ensure necessary subdirs exist
+            let parent_dir = wikipedia_dir.parent().unwrap();
+            fs::create_dir_all(parent_dir)
+                .with_context(|| format!("creating wikipedia directory {:?}", parent_dir))?;
+        }
+
+        unix::fs::symlink(&main_dir, &wikipedia_dir).with_context(|| {
+            format!(
+                "creating symlink from {:?} to {:?}",
+                wikipedia_dir, main_dir
+            )
+        })?;
+    }
+
+    Ok(main_dir)
+}
+
+/// Write selected article to disk.
+///
+/// - Write page contents to wikidata page (`wikidata.org/wiki/QXXX/lang.html`).
+/// - If the page has no wikidata qid, write contents to wikipedia location (`lang.wikipedia.org/wiki/article_title/lang.html`).
+/// - Create links from all wikipedia urls and redirects (`lang.wikipedia.org/wiki/a_redirect -> wikidata.org/wiki/QXXX`).
+fn write(
+    base: impl AsRef<Path>,
+    page: &Page,
+    redirects: impl IntoIterator<Item = WikipediaTitleNorm>,
+) -> anyhow::Result<()> {
+    let article_dir = create_article_dir(base, page, redirects)?;
+
+    // Write html to determined file.
+    let mut filename = article_dir;
     filename.push(&page.in_language.identifier);
     filename.set_extension("html");
 
     debug!("{:?}: {:?}", page.name, filename);
 
     if filename.exists() {
-        debug!("Exists, skipping");
-        return Ok(());
-    }
-
-    let subfolder = filename.parent().unwrap();
-    if !subfolder.exists() {
-        create_dir(subfolder)?;
+        debug!("Overwriting existing file");
     }
 
     let html = simplify(&page.article_body.html, &page.in_language.identifier);
 
-    let mut file = File::create(&filename)?;
-    file.write_all(html.as_bytes())?;
+    let mut file =
+        File::create(&filename).with_context(|| format!("creating html file {:?}", filename))?;
+    file.write_all(html.as_bytes())
+        .with_context(|| format!("writing html file {:?}", filename))?;
 
     Ok(())
 }
@@ -104,14 +177,28 @@ fn main() -> anyhow::Result<()> {
     for page in stream {
         let page = page?;
 
-        if !(is_wikidata_match(&wikidata_ids, &page).is_some()
-            || is_wikipedia_match(&wikipedia_titles, &page).is_some())
-        {
+        let is_wikidata_match = page
+            .wikidata()
+            .map(|qid| wikidata_ids.contains(&qid))
+            .unwrap_or_default();
+
+        let matching_titles = page
+            .all_titles()
+            .filter_map(|r| {
+                r.map(Some).unwrap_or_else(|e| {
+                    warn!("Could not parse title for {:?}: {:#}", &page.name, e);
+                    None
+                })
+            })
+            .filter(|t| wikipedia_titles.contains(t))
+            .collect::<Vec<_>>();
+
+        if !is_wikidata_match && matching_titles.is_empty() {
             continue;
         }
 
-        if let Err(e) = write(&args.output_dir, page) {
-            error!("Error writing article: {}", e);
+        if let Err(e) = write(&args.output_dir, &page, matching_titles) {
+            error!("Error writing article {:?}: {:#}", page.name, e);
         }
     }
 
