@@ -26,11 +26,11 @@ pub fn simplify(html: &str, lang: &str) -> String {
 
     let mut to_remove = Vec::new();
 
-    // remove sections
+    // Remove configured sections and all trailing elements until next section.
 
     if let Some(bad_sections) = CONFIG.sections_to_remove.get(lang) {
         for header in document.select(&HEADERS) {
-            // TODO: should this join all text nodes?
+            // TODO: Should this join all text nodes?
             let Some(title) = header.text().next() else {
                 continue
             };
@@ -38,11 +38,11 @@ pub fn simplify(html: &str, lang: &str) -> String {
             if bad_sections.contains(&title.trim()) {
                 to_remove.push(header.id());
                 let header_level = header.value().name();
-                // strip trailing nodes
+                // Strip trailing nodes.
                 for sibling in header.next_siblings() {
                     if let Some(element) = sibling.value().as_element() {
                         if element.name() == header_level {
-                            // TODO: should this check for a higher level?
+                            // TODO: Should this check for a higher level?
                             break;
                         }
                     }
@@ -60,7 +60,7 @@ pub fn simplify(html: &str, lang: &str) -> String {
         warn!("No sections to remove configured for lang {lang:?}");
     }
 
-    // remove elements with no text that isn't whitespace
+    // Remove elements with no text that isn't whitespace.
 
     for element in document
         .root_element()

@@ -119,7 +119,7 @@ pub struct WikipediaTitleNorm {
 
 impl WikipediaTitleNorm {
     fn normalize_title(title: &str) -> String {
-        // TODO: compare with generator url creation
+        // TODO: Compare with map generator url creation, ensure covers all cases.
         title.replace(' ', "_")
     }
 

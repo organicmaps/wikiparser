@@ -93,8 +93,8 @@ fn main() -> anyhow::Result<()> {
     info!("Processing dump");
     let dump = stdin().lock();
 
-    // TODO: compare different deserialization methods
-    // docs warn against using a reader directly, and it's slower than tar can decompress the dump
+    // TODO: Compare different deserialization methods.
+    // The docs warn against using a reader directly, and it's slower than tar can decompress the dump.
     // let stream = serde_json::Deserializer::from_reader(dump).into_iter::<Page>();
     let stream = dump.lines().map(|r| {
         r.map_err(anyhow::Error::new)
