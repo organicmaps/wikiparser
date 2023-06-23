@@ -46,7 +46,10 @@ pub fn is_wikidata_match(ids: &HashSet<WikidataQid>, page: &Page) -> Option<Wiki
     let wikidata_id = match WikidataQid::from_str(wikidata_id) {
         Ok(qid) => qid,
         Err(e) => {
-            eprintln!("Could not parse QID: {:?}: {}", wikidata_id, e);
+            warn!(
+                "Could not parse QID for {:?}: {:?}: {:#}",
+                page.name, wikidata_id, e
+            );
             return None;
         }
     };
@@ -58,17 +61,26 @@ pub fn is_wikipedia_match(
     titles: &HashSet<WikipediaTitleNorm>,
     page: &Page,
 ) -> Option<WikipediaTitleNorm> {
-    let title = WikipediaTitleNorm::from_title(&page.name, &page.in_language.identifier);
-
-    if titles.get(&title).is_some() {
-        return Some(title);
+    match WikipediaTitleNorm::from_title(&page.name, &page.in_language.identifier) {
+        Err(e) => warn!("Could not parse title for {:?}: {:#}", page.name, e),
+        Ok(title) => {
+            if titles.get(&title).is_some() {
+                return Some(title);
+            }
+        }
     }
 
     for redirect in &page.redirects {
-        let title = WikipediaTitleNorm::from_title(&redirect.name, &page.in_language.identifier);
-
-        if titles.get(&title).is_some() {
-            return Some(title);
+        match WikipediaTitleNorm::from_title(&redirect.name, &page.in_language.identifier) {
+            Err(e) => warn!(
+                "Could not parse redirect title for {:?}: {:?}: {:#}",
+                page.name, redirect.name, e
+            ),
+            Ok(title) => {
+                if titles.get(&title).is_some() {
+                    return Some(title);
+                }
+            }
         }
     }
 
@@ -84,8 +96,14 @@ pub fn is_wikipedia_match(
 /// use om_wikiparser::wm::WikidataQid;
 ///
 /// let with_q = WikidataQid::from_str("Q12345").unwrap();
-/// let without_q = WikidataQid::from_str("12345").unwrap();
+/// let without_q = WikidataQid::from_str(" 12345 ").unwrap();
 /// assert_eq!(with_q, without_q);
+///
+/// assert!(WikidataQid::from_str("q12345").is_ok());
+/// assert!(WikidataQid::from_str("https://wikidata.org/wiki/Q12345").is_err());
+/// assert!(WikidataQid::from_str("Article_Title").is_err());
+/// assert!(WikidataQid::from_str("Q").is_err());
+/// assert!(WikidataQid::from_str("").is_err());
 /// ```
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct WikidataQid(u32);
@@ -94,7 +112,8 @@ impl FromStr for WikidataQid {
     type Err = ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.strip_prefix('Q').unwrap_or(s);
+        let s = s.trim();
+        let s = s.strip_prefix(['Q', 'q']).unwrap_or(s);
         u32::from_str(s).map(WikidataQid)
     }
 }
@@ -107,9 +126,12 @@ impl FromStr for WikidataQid {
 /// ```
 /// use om_wikiparser::wm::WikipediaTitleNorm;
 ///
-/// let title = WikipediaTitleNorm::from_title("Article Title", "en");
+/// let title = WikipediaTitleNorm::from_title("Article Title", "en").unwrap();
 /// let url = WikipediaTitleNorm::from_url("https://en.wikipedia.org/wiki/Article_Title#Section").unwrap();
 /// assert_eq!(url, title);
+///
+/// assert!(WikipediaTitleNorm::from_url("https://en.wikipedia.org/not_a_wiki_page").is_err());
+/// assert!(WikipediaTitleNorm::from_url("https://wikidata.org/wiki/Q12345").is_err());
 /// ```
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct WikipediaTitleNorm {
@@ -120,12 +142,12 @@ pub struct WikipediaTitleNorm {
 impl WikipediaTitleNorm {
     fn normalize_title(title: &str) -> String {
         // TODO: Compare with map generator url creation, ensure covers all cases.
-        title.replace(' ', "_")
+        title.trim().replace(' ', "_")
     }
 
     // https://en.wikipedia.org/wiki/Article_Title
     pub fn from_url(url: &str) -> anyhow::Result<Self> {
-        let url = Url::parse(url)?;
+        let url = Url::parse(url.trim())?;
 
         let (subdomain, host) = url
             .host_str()
@@ -154,19 +176,30 @@ impl WikipediaTitleNorm {
             .ok_or_else(|| anyhow!("Expected second segment in path"))?;
         let title = urlencoding::decode(title)?;
 
-        Ok(Self::from_title(&title, lang))
+        Self::from_title(&title, lang)
     }
 
     // en:Article Title
     fn _from_osm_tag(tag: &str) -> anyhow::Result<Self> {
-        let (lang, title) = tag.split_once(':').ok_or_else(|| anyhow!("Expected ':'"))?;
+        let (lang, title) = tag
+            .trim()
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Expected ':'"))?;
 
-        Ok(Self::from_title(title, lang))
+        Self::from_title(title, lang)
     }
 
-    pub fn from_title(title: &str, lang: &str) -> Self {
+    pub fn from_title(title: &str, lang: &str) -> anyhow::Result<Self> {
+        let title = title.trim();
+        let lang = lang.trim();
+        if title.is_empty() {
+            bail!("title cannot be empty or whitespace");
+        }
+        if lang.is_empty() {
+            bail!("lang cannot be empty or whitespace");
+        }
         let name = Self::normalize_title(title);
         let lang = lang.to_owned();
-        Self { name, lang }
+        Ok(Self { name, lang })
     }
 }
