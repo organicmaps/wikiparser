@@ -138,6 +138,8 @@ fn write(
 }
 
 fn main() -> anyhow::Result<()> {
+    // Use info level by default, load overrides from `RUST_LOG` env variable.
+    // See https://docs.rs/env_logger/latest/env_logger/index.html#example
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()

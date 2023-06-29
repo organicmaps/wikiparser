@@ -35,6 +35,10 @@ As an example of usage with the map generator:
 # Transform intermediate files from generator.
 cut -f 2 id_to_wikidata.csv > wikidata_ids.txt
 tail -n +2 wiki_urls.txt | cut -f 3 > wikipedia_urls.txt
+# Enable backtraces in errors and panics.
+export RUST_BACKTRACE=1
+# Set log level to debug
+export RUST_LOG=om_wikiparser=debug
 # Begin extraction.
 for dump in $DUMP_DOWNLOAD_DIR/*-ENTERPRISE-HTML.json.tar.gz
 do

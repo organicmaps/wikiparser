@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use ego_tree::NodeId;
 use once_cell::sync::Lazy;
 use scraper::{ElementRef, Html, Selector};
 use serde::Deserialize;
@@ -51,34 +52,65 @@ pub fn simplify(html: &str, lang: &str) -> String {
             }
         }
 
-        for id in to_remove.drain(..) {
-            if let Some(mut node) = document.tree.get_mut(id) {
-                node.detach();
-            }
-        }
+        remove_ids(&mut document, to_remove.drain(..));
     } else {
         warn!("No sections to remove configured for lang {lang:?}");
     }
 
-    // Remove elements with no text that isn't whitespace.
-
-    for element in document
+    for el in document
         .root_element()
         .descendants()
         .filter_map(ElementRef::wrap)
     {
-        if element.text().all(|t| t.trim().is_empty()) {
-            to_remove.push(element.id());
+        if is_image(&el) || is_empty_or_whitespace(&el) {
+            to_remove.push(el.id());
         }
     }
+    remove_ids(&mut document, to_remove.drain(..));
 
-    for id in to_remove.drain(..) {
+    remove_links(&mut document);
+
+    document.html()
+}
+
+fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
+    for id in ids {
         if let Some(mut node) = document.tree.get_mut(id) {
             node.detach();
         }
     }
+}
 
-    document.html()
+fn is_empty_or_whitespace(el: &ElementRef) -> bool {
+    el.text().flat_map(str::chars).all(char::is_whitespace)
+}
+
+fn is_image(el: &ElementRef) -> bool {
+    ["img", "picture"].contains(&el.value().name())
+}
+
+/// Remove all links, preserving any inner elements/text.
+fn remove_links(document: &mut Html) {
+    let links: Vec<_> = document
+        .select(&Selector::parse("a").unwrap())
+        .map(|el| el.id())
+        .collect();
+
+    for id in links {
+        let Some(mut node) = document.tree.get_mut(id) else { continue };
+        if node.parent().is_none() {
+            continue;
+        }
+
+        // reparent to same location as node
+        while let Some(mut child) = node.first_child() {
+            let child_id = child.id();
+            child.detach();
+            node.insert_id_before(child_id);
+        }
+
+        node.detach();
+    }
 }
 
 #[cfg(test)]
@@ -88,5 +120,51 @@ mod test {
     #[test]
     fn static_config_parses() {
         assert!(!CONFIG.sections_to_remove.is_empty());
+    }
+
+    #[test]
+    fn remove_links() {
+        let html = r#"
+        <p> Some text that includes
+            <a href="Some_Page"><span id="inner-content">several</span></a>
+            <a id="second-link" href="./Another_Page">relative links</a>
+        and
+            <a href="https://example.com/page">an absolute link</a>
+        .
+        </p>
+        "#;
+
+        let anchors = Selector::parse("a").unwrap();
+        let inner_element = Selector::parse("#inner-content").unwrap();
+        let second_link = Selector::parse("#second-link").unwrap();
+
+        let mut document = Html::parse_fragment(html);
+        let links: Vec<_> = document
+            .select(&anchors)
+            .filter_map(|el| el.value().attr("href"))
+            .collect();
+
+        eprintln!("{}", document.html());
+
+        assert_eq!(
+            vec!["Some_Page", "./Another_Page", "https://example.com/page"],
+            links,
+            "Links in original html are not expected."
+        );
+
+        // Detach one of the links from the root tree (as if previously deleted) to ensure it handles orphan nodes nicely.
+        let link = document.select(&second_link).next().unwrap().id();
+        document.tree.get_mut(link).unwrap().detach();
+
+        super::remove_links(&mut document);
+
+        let links: Vec<_> = document.select(&anchors).collect();
+
+        assert!(links.is_empty(), "All links should be removed.");
+
+        assert!(
+            document.select(&inner_element).next().is_some(),
+            "Link inner elements should be preserved."
+        );
     }
 }

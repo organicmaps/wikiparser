@@ -522,6 +522,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ego-tree",
  "env_logger",
  "log",
  "once_cell",

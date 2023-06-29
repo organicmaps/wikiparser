@@ -7,6 +7,11 @@ use std::io::{stdin, stdout, Read, Write};
 use om_wikiparser::html::simplify;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Info)
+        .parse_default_env()
+        .try_init()?;
+
     let mut input = String::new();
     stdin().read_to_string(&mut input)?;
 
