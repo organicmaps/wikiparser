@@ -19,6 +19,35 @@ Alternatively, build it with `cargo build --release`, which places the binary in
 
 Run the program with the `--help` flag to see all supported arguments.
 
+```shell
+$ cargo run --release -- --help
+Extract article HTML from Wikipedia Enterprise HTML dumps.
+
+Expects an uncompressed dump connected to stdin.
+
+Usage: om-wikiparser [OPTIONS] <OUTPUT_DIR>
+
+Arguments:
+  <OUTPUT_DIR>
+          Directory to write the extracted articles to
+
+Options:
+      --wikidata-ids <WIKIDATA_IDS>
+          File of Wikidata QIDs to extract, one per line (e.g. `Q12345`)
+
+      --wikipedia-urls <WIKIPEDIA_URLS>
+          File of Wikipedia article titles to extract, one per line (e.g. `https://lang.wikipedia.org/wiki/Article_Title`)
+
+      --write-new-ids <WRITE_NEW_IDS>
+          Append QIDs of articles matched by title but not QID to the provided file
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+```
+
 It takes as inputs:
 - A wikidata enterprise JSON dump, extracted and connected to `stdin`.
 - A file of Wikidata QIDs to extract, one per line (e.g. `Q12345`), passed as the CLI flag `--wikidata-ids`.
