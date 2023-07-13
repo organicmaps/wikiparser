@@ -3,7 +3,7 @@ name: Shell Checks
 on:
   pull_request:
     paths:
-    - **.sh
+      - "**.sh"
 
 jobs:
   test:
