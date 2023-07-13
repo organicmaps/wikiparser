@@ -3,9 +3,9 @@ name: Rust Checks
 on:
   pull_request:
     paths-ignore:
-    - .gitignore
-    - LICENSE
-    - README.md
+      - .gitignore
+      - LICENSE
+      - README.md
 
 jobs:
   test:
