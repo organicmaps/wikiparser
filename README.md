@@ -2,12 +2,20 @@
 
 _Extracts articles from [Wikipedia database dumps](https://en.wikipedia.org/wiki/Wikipedia:Database_download) for embedding into the `mwm` map files created by [the Organic Maps generator](https://github.com/organicmaps/organicmaps/blob/master/tools/python/maps_generator/README.md)._
 
+Extracted articles are identified by Wikipedia article titles in url or text form (language-specific), and [Wikidata QIDs](https://www.wikidata.org/wiki/Wikidata:Glossary#QID) (language-agnostic).
+OpenStreetMap commonly stores these as [`wikipedia*=`](https://wiki.openstreetmap.org/wiki/Key:wikipedia) and [`wikidata=`](https://wiki.openstreetmap.org/wiki/Key:wikidata) tags on objects.
+
 ## Configuring
 
 [`article_processing_config.json`](article_processing_config.json) should be updated when adding a new language.
 It defines article sections that are not important for users and should be removed from the extracted HTML.
 
 ## Usage
+
+To use with the map generator, see the [`run.sh` script](run.sh) and its own help documentation.
+It handles preparing the inputs, using multiple dumps, and re-running to convert titles to QIDs and extract them across languages.
+
+To run the wikiparser manually or for development, see below.
 
 First, install [the rust language tools](https://www.rust-lang.org/)
 
@@ -19,7 +27,7 @@ Alternatively, build it with `cargo build --release`, which places the binary in
 
 Run the program with the `--help` flag to see all supported arguments.
 
-```shell
+```
 $ cargo run --release -- --help
 Extract article HTML from Wikipedia Enterprise HTML dumps.
 
@@ -57,10 +65,11 @@ It takes as inputs:
 - A file of Wikipedia article titles to extract, one per line (e.g. `https://$LANG.wikipedia.org/wiki/$ARTICLE_TITLE`), passed as a CLI flag `--wikipedia-urls`.
 - A directory to write the extracted articles to, as a CLI argument.
 
-As an example of usage with the map generator:
+As an example of manual usage with the map generator:
 - Assuming this program is installed to `$PATH` as `om-wikiparser`.
 - Download [the dumps in the desired languages](https://dumps.wikimedia.org/other/enterprise_html/runs/) (Use the files with the format `${LANG}wiki-NS0-${DATE}-ENTERPRISE-HTML.json.tar.gz`).
   Set `DUMP_DOWNLOAD_DIR` to the location they are downloaded.
+- Run a maps build with descriptions enabled to generate the `id_to_wikidata.csv` and `wiki_urls.txt` files.
 - Run the following from within the `intermediate_data` subdirectory of the maps build directory:
 
 ```shell
