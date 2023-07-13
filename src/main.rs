@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 #[macro_use]
 extern crate log;
 
@@ -15,13 +15,31 @@ use om_wikiparser::{
     wm::{parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
 };
 
+/// Extract article HTML from Wikipedia Enterprise HTML dumps.
+///
+/// Expects an uncompressed dump connected to stdin.
 #[derive(Parser)]
+#[command(version)]
 struct Args {
+    /// Directory to write the extracted articles to.
     output_dir: PathBuf,
-    #[arg(long)]
+
+    /// Path to file that contains a Wikidata QID to extract on each line
+    /// (e.g. `Q12345`).
+    #[arg(long, help_heading = "FILTERS")]
     wikidata_ids: Option<PathBuf>,
-    #[arg(long)]
+
+    /// Path to file that contains a Wikipedia article url to extract on each line
+    /// (e.g. `https://lang.wikipedia.org/wiki/Article_Title`).
+    #[arg(long, help_heading = "FILTERS")]
     wikipedia_urls: Option<PathBuf>,
+
+    /// Append to the provided file path the QIDs of articles matched by title but not QID.
+    ///
+    /// Use this to save the QIDs of articles you know the url of, but not the QID.
+    /// The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
+    #[arg(long, requires("wikipedia_urls"))]
+    write_new_ids: Option<PathBuf>,
 }
 
 /// Determine the directory to write the article contents to, create it, and create any necessary symlinks to it.
@@ -65,7 +83,6 @@ fn create_article_dir(
         .with_context(|| format!("creating main directory {:?}", &main_dir))?;
 
     // Write symlinks to main directory.
-    // TODO: Only write redirects that we care about.
     for title in redirects {
         let wikipedia_dir = title.get_dir(base.to_owned());
 
@@ -147,19 +164,38 @@ fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    info!("Loading urls");
-    let wikipedia_titles = args
-        .wikipedia_urls
-        .map(parse_wikipedia_file)
-        .transpose()?
-        .unwrap_or_default();
+    if args.wikidata_ids.is_none() && args.wikipedia_urls.is_none() {
+        let mut cmd = Args::command();
+        cmd.error(
+            clap::error::ErrorKind::MissingRequiredArgument,
+            "one or both of --wikidata-ids and --wikipedia-urls is required",
+        )
+        .exit()
+    }
 
-    info!("Loading ids");
-    let wikidata_ids = args
-        .wikidata_ids
-        .map(parse_wikidata_file)
-        .transpose()?
-        .unwrap_or_default();
+    let wikipedia_titles = if let Some(path) = args.wikipedia_urls {
+        info!("Loading article urls from {path:?}");
+        let urls = parse_wikipedia_file(path)?;
+        debug!("Parsed {} unique article urls", urls.len());
+        urls
+    } else {
+        Default::default()
+    };
+
+    let wikidata_ids = if let Some(path) = args.wikidata_ids {
+        info!("Loading wikidata ids from {path:?}");
+        let ids = parse_wikidata_file(path)?;
+        debug!("Parsed {} unique wikidata ids", ids.len());
+        ids
+    } else {
+        Default::default()
+    };
+
+    let mut write_new_ids = args
+        .write_new_ids
+        .as_ref()
+        .map(|p| File::options().create(true).append(true).open(p))
+        .transpose()?;
 
     if !args.output_dir.is_dir() {
         bail!("output dir {:?} does not exist", args.output_dir)
@@ -179,24 +215,41 @@ fn main() -> anyhow::Result<()> {
     for page in stream {
         let page = page?;
 
-        let is_wikidata_match = page
-            .wikidata()
-            .map(|qid| wikidata_ids.contains(&qid))
+        let qid = page.wikidata();
+
+        let is_wikidata_match = qid
+            .as_ref()
+            .map(|qid| wikidata_ids.contains(qid))
             .unwrap_or_default();
 
-        let matching_titles = page
-            .all_titles()
-            .filter_map(|r| {
-                r.map(Some).unwrap_or_else(|e| {
-                    warn!("Could not parse title for {:?}: {:#}", &page.name, e);
-                    None
+        let matching_titles = if wikipedia_titles.is_empty() {
+            Default::default()
+        } else {
+            page.all_titles()
+                .filter_map(|r| {
+                    r.map(Some).unwrap_or_else(|e| {
+                        warn!("Could not parse title for {:?}: {:#}", &page.name, e);
+                        None
+                    })
                 })
-            })
-            .filter(|t| wikipedia_titles.contains(t))
-            .collect::<Vec<_>>();
+                .filter(|t| wikipedia_titles.contains(t))
+                .collect::<Vec<_>>()
+        };
 
         if !is_wikidata_match && matching_titles.is_empty() {
             continue;
+        }
+
+        if let (Some(f), Some(qid)) = (&mut write_new_ids, &qid) {
+            if !is_wikidata_match && !matching_titles.is_empty() {
+                debug!("Writing new id {} for article {:?}", qid, page.name);
+                writeln!(f, "{}", qid).with_context(|| {
+                    format!(
+                        "writing new id to file {:?}",
+                        args.write_new_ids.as_ref().unwrap()
+                    )
+                })?;
+            }
         }
 
         if let Err(e) = write(&args.output_dir, &page, matching_titles) {

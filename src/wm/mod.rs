@@ -14,16 +14,23 @@ pub use page::Page;
 /// Read from a file of urls on each line.
 pub fn parse_wikidata_file(path: impl AsRef<OsStr>) -> anyhow::Result<HashSet<WikidataQid>> {
     let contents = fs::read_to_string(path.as_ref())?;
-    contents
+    Ok(contents
         .lines()
         .enumerate()
         .map(|(i, line)| {
             WikidataQid::from_str(line).with_context(|| {
                 let line_num = i + 1;
-                format!("bad QID value on line {line_num}: {line:?}")
+                format!("on line {line_num}: {line:?}")
             })
         })
-        .collect()
+        .filter_map(|r| match r {
+            Ok(qid) => Some(qid),
+            Err(e) => {
+                warn!("Could not parse QID: {:#}", e);
+                None
+            }
+        })
+        .collect())
 }
 
 /// Read article titles from a file of urls on each line.
@@ -31,16 +38,23 @@ pub fn parse_wikipedia_file(
     path: impl AsRef<OsStr>,
 ) -> anyhow::Result<HashSet<WikipediaTitleNorm>> {
     let contents = fs::read_to_string(path.as_ref())?;
-    contents
+    Ok(contents
         .lines()
         .enumerate()
         .map(|(i, line)| {
             WikipediaTitleNorm::from_url(line).with_context(|| {
                 let line_num = i + 1;
-                format!("bad wikipedia url on line {line_num}: {line:?}")
+                format!("on line {line_num}: {line:?}")
             })
         })
-        .collect()
+        .filter_map(|r| match r {
+            Ok(qid) => Some(qid),
+            Err(e) => {
+                warn!("Could not parse wikipedia title: {:#}", e);
+                None
+            }
+        })
+        .collect())
 }
 
 /// Wikidata QID/Q Number
