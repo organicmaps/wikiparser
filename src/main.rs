@@ -83,7 +83,6 @@ fn create_article_dir(
         .with_context(|| format!("creating main directory {:?}", &main_dir))?;
 
     // Write symlinks to main directory.
-    // TODO: Only write redirects that we care about.
     for title in redirects {
         let wikipedia_dir = title.get_dir(base.to_owned());
 
