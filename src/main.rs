@@ -23,13 +23,21 @@ use om_wikiparser::{
 struct Args {
     /// Directory to write the extracted articles to.
     output_dir: PathBuf,
-    /// File of Wikidata QIDs to extract, one per line (e.g. `Q12345`).
-    #[arg(long)]
+
+    /// Path to file that contains a Wikidata QID to extract on each line
+    /// (e.g. `Q12345`).
+    #[arg(long, help_heading = "FILTERS")]
     wikidata_ids: Option<PathBuf>,
-    /// File of Wikipedia article titles to extract, one per line (e.g. `https://lang.wikipedia.org/wiki/Article_Title`).
-    #[arg(long)]
+
+    /// Path to file that contains a Wikipedia article url to extract on each line
+    /// (e.g. `https://lang.wikipedia.org/wiki/Article_Title`).
+    #[arg(long, help_heading = "FILTERS")]
     wikipedia_urls: Option<PathBuf>,
-    /// Append QIDs of articles matched by title but not QID to the provided file.
+
+    /// Append to the provided file path the QIDs of articles matched by title but not QID.
+    ///
+    /// Use this to save the QIDs of articles you know the url of, but not the QID.
+    /// The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
     #[arg(long, requires("wikipedia_urls"))]
     write_new_ids: Option<PathBuf>,
 }

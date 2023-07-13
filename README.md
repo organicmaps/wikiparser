@@ -32,20 +32,23 @@ Arguments:
           Directory to write the extracted articles to
 
 Options:
-      --wikidata-ids <WIKIDATA_IDS>
-          File of Wikidata QIDs to extract, one per line (e.g. `Q12345`)
-
-      --wikipedia-urls <WIKIPEDIA_URLS>
-          File of Wikipedia article titles to extract, one per line (e.g. `https://lang.wikipedia.org/wiki/Article_Title`)
-
       --write-new-ids <WRITE_NEW_IDS>
-          Append QIDs of articles matched by title but not QID to the provided file
+          Append to the provided file path the QIDs of articles matched by title but not QID.
+
+          Use this to save the QIDs of articles you know the url of, but not the QID. The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
 
   -h, --help
           Print help (see a summary with '-h')
 
   -V, --version
           Print version
+
+FILTERS:
+      --wikidata-ids <WIKIDATA_IDS>
+          Path to file that contains a Wikidata QID to extract on each line (e.g. `Q12345`)
+
+      --wikipedia-urls <WIKIPEDIA_URLS>
+          Path to file that contains a Wikipedia article url to extract on each line (e.g. `https://lang.wikipedia.org/wiki/Article_Title`)
 ```
 
 It takes as inputs:
