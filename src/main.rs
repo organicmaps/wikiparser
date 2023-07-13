@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context};
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 #[macro_use]
 extern crate log;
 
@@ -156,6 +156,15 @@ fn main() -> anyhow::Result<()> {
         .try_init()?;
 
     let args = Args::parse();
+
+    if args.wikidata_ids.is_none() && args.wikipedia_urls.is_none() {
+        let mut cmd = Args::command();
+        cmd.error(
+            clap::error::ErrorKind::MissingRequiredArgument,
+            "one or both of --wikidata-ids and --wikipedia-urls is required",
+        )
+        .exit()
+    }
 
     let wikipedia_titles = if let Some(path) = args.wikipedia_urls {
         info!("Loading article urls from {path:?}");
