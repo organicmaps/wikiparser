@@ -38,6 +38,7 @@ struct Args {
     ///
     /// Use this to save the QIDs of articles you know the url of, but not the QID.
     /// The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
+    /// Writes are atomicly appended to the file, so the same path may be used by multiple concurrent instances.
     #[arg(long, requires("wikipedia_urls"))]
     write_new_ids: Option<PathBuf>,
 }
@@ -191,6 +192,15 @@ fn main() -> anyhow::Result<()> {
         Default::default()
     };
 
+    // NOTE: For atomic writes to the same file across threads/processes:
+    // - The file needs to be opened in APPEND mode (`.append(true)`).
+    // - Each write needs to be a single syscall (for Rust, use `format!` for formatting before calling `write!`, or `write!` to a `String` first).
+    // - Each write needs to be under `PIPE_BUF` size (see `man write(3)`), usually 4kb on Linux.
+    //
+    // For more information, see:
+    // - `man write(3posix)`: https://www.man7.org/linux/man-pages/man3/write.3p.html
+    // - `std::fs::OpenOptions::append`: https://doc.rust-lang.org/std/fs/struct.OpenOptions.html#method.append
+    // - https://stackoverflow.com/questions/1154446/is-file-append-atomic-in-unix
     let mut write_new_ids = args
         .write_new_ids
         .as_ref()
@@ -240,10 +250,14 @@ fn main() -> anyhow::Result<()> {
             continue;
         }
 
+        // Write matched new QIDs back to fild.
         if let (Some(f), Some(qid)) = (&mut write_new_ids, &qid) {
             if !is_wikidata_match && !matching_titles.is_empty() {
                 debug!("Writing new id {} for article {:?}", qid, page.name);
-                writeln!(f, "{}", qid).with_context(|| {
+                // NOTE: Write to string buffer first to have a single atomic write syscall.
+                // See `write_new_ids` for more info.
+                let line = format!("{}\n", qid);
+                write!(f, "{}", line).with_context(|| {
                     format!(
                         "writing new id to file {:?}",
                         args.write_new_ids.as_ref().unwrap()
