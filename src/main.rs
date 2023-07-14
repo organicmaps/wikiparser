@@ -15,11 +15,24 @@ use om_wikiparser::{
     wm::{parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
 };
 
+/// Get the version returned by `git describe`, e.g.:
+/// - `v2.0` if a git tag
+/// - the commit hash `034ac04` if not a tag
+/// - `034ac04-dirty` if uncommited changes are present,
+/// or the crate version if not available (if installed from crates.io).
+///
+/// See `build.rs` file for more info.
+fn version() -> &'static str {
+    option_env!("CARGO_GIT_VERSION")
+        .or(option_env!("CARGO_PKG_VERSION"))
+        .unwrap_or("unknown")
+}
+
 /// Extract article HTML from Wikipedia Enterprise HTML dumps.
 ///
 /// Expects an uncompressed dump connected to stdin.
 #[derive(Parser)]
-#[command(version)]
+#[command(version = crate::version())]
 struct Args {
     /// Directory to write the extracted articles to.
     output_dir: PathBuf,
@@ -173,6 +186,8 @@ fn main() -> anyhow::Result<()> {
         )
         .exit()
     }
+
+    info!("{} {}", Args::command().get_name(), version());
 
     let wikipedia_titles = if let Some(path) = args.wikipedia_urls {
         info!("Loading article urls from {path:?}");
