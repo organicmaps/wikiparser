@@ -22,7 +22,7 @@ then
     exit 1
 fi
 
-# Ensure we're running in the directory of this script
+# Ensure we're running in the directory of this script.
 SCRIPT_PATH=$(dirname "$0")
 cd "$SCRIPT_PATH"
 SCRIPT_PATH=$(pwd)
