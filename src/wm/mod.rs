@@ -57,6 +57,76 @@ pub fn parse_wikipedia_file(
         .collect())
 }
 
+pub fn parse_osm_tag_file(
+    path: impl AsRef<OsStr>,
+    qids: &mut HashSet<WikidataQid>,
+    titles: &mut HashSet<WikipediaTitleNorm>,
+) -> anyhow::Result<()> {
+    let path = path.as_ref();
+    let mut rdr = csv::ReaderBuilder::new().delimiter(b'\t').from_path(path)?;
+
+    let mut qid_col = None;
+    let mut title_col = None;
+    for (column, title) in rdr.headers()?.iter().enumerate() {
+        match title {
+            "wikidata" => qid_col = Some(column),
+            "wikipedia" => title_col = Some(column),
+            _ => (),
+        }
+    }
+
+    let qid_col = qid_col.ok_or_else(|| anyhow!("Cannot find 'wikidata' column"))?;
+    let title_col = title_col.ok_or_else(|| anyhow!("Cannot find 'wikipedia' column"))?;
+
+    let mut row = csv::StringRecord::new();
+    loop {
+        match rdr.read_record(&mut row) {
+            Ok(true) => {}
+            // finished
+            Ok(false) => break,
+            // attempt to recover from parsing errors
+            Err(e) => {
+                error!("Error parsing tsv file: {}", e);
+                continue;
+            }
+        }
+
+        let qid = &row[qid_col].trim();
+        if !qid.is_empty() {
+            match WikidataQid::from_str(qid) {
+                Ok(qid) => {
+                    qids.insert(qid);
+                }
+                Err(e) => warn!(
+                    "Cannot parse qid {:?} on line {} in {:?}: {}",
+                    qid,
+                    rdr.position().line(),
+                    path,
+                    e
+                ),
+            }
+        }
+
+        let title = &row[title_col].trim();
+        if !title.is_empty() {
+            match WikipediaTitleNorm::_from_osm_tag(title) {
+                Ok(title) => {
+                    titles.insert(title);
+                }
+                Err(e) => warn!(
+                    "Cannot parse title {:?} on line {} in {:?}: {}",
+                    title,
+                    rdr.position().line(),
+                    path,
+                    e
+                ),
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Wikidata QID/Q Number
 ///
 /// See https://www.wikidata.org/wiki/Wikidata:Glossary#QID

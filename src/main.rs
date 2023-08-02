@@ -12,7 +12,7 @@ extern crate log;
 
 use om_wikiparser::{
     html::simplify,
-    wm::{parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
+    wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
 };
 
 /// Get the version returned by `git describe`, e.g.:
@@ -36,6 +36,12 @@ fn version() -> &'static str {
 struct Args {
     /// Directory to write the extracted articles to.
     output_dir: PathBuf,
+
+    /// Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
+    ///
+    /// This can be generated with `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
+    #[arg(long, help_heading = "FILTERS")]
+    osm_tags: Option<PathBuf>,
 
     /// Path to file that contains a Wikidata QID to extract on each line
     /// (e.g. `Q12345`).
@@ -178,34 +184,38 @@ fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    if args.wikidata_ids.is_none() && args.wikipedia_urls.is_none() {
+    if args.wikidata_ids.is_none() && args.wikipedia_urls.is_none() && args.osm_tags.is_none() {
         let mut cmd = Args::command();
         cmd.error(
             clap::error::ErrorKind::MissingRequiredArgument,
-            "one or both of --wikidata-ids and --wikipedia-urls is required",
+            "at least one --osm-tags --wikidata-ids --wikipedia-urls is required",
         )
         .exit()
     }
 
     info!("{} {}", Args::command().get_name(), version());
 
-    let wikipedia_titles = if let Some(path) = args.wikipedia_urls {
+    let mut wikipedia_titles = if let Some(path) = args.wikipedia_urls {
         info!("Loading article urls from {path:?}");
-        let urls = parse_wikipedia_file(path)?;
-        debug!("Parsed {} unique article urls", urls.len());
-        urls
+        parse_wikipedia_file(path)?
     } else {
         Default::default()
     };
 
-    let wikidata_ids = if let Some(path) = args.wikidata_ids {
+    let mut wikidata_ids = if let Some(path) = args.wikidata_ids {
         info!("Loading wikidata ids from {path:?}");
-        let ids = parse_wikidata_file(path)?;
-        debug!("Parsed {} unique wikidata ids", ids.len());
-        ids
+        parse_wikidata_file(path)?
     } else {
         Default::default()
     };
+
+    if let Some(path) = args.osm_tags {
+        info!("Loading wikipedia/wikidata osm tags from {path:?}");
+        parse_osm_tag_file(path, &mut wikidata_ids, &mut wikipedia_titles)?;
+    }
+
+    debug!("Parsed {} unique article urls", wikipedia_titles.len());
+    debug!("Parsed {} unique wikidata ids", wikidata_ids.len());
 
     // NOTE: For atomic writes to the same file across threads/processes:
     // - The file needs to be opened in APPEND mode (`.append(true)`).
