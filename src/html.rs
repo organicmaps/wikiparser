@@ -22,6 +22,19 @@ static CONFIG: Lazy<Config<'static>> = Lazy::new(|| {
 static HEADERS: Lazy<Selector> =
     Lazy::new(|| Selector::parse("h1, h2, h3, h4, h5, h6, h7").unwrap());
 
+/// Elements that should always be kept, regardless of other metrics.
+static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
+    Selector::parse(
+        &[
+            // Meta tags that affect rendering.
+            "head > meta[charset]",
+            "head > meta[http-equiv]",
+        ]
+        .join(", "),
+    )
+    .unwrap()
+});
+
 pub fn simplify(html: &str, lang: &str) -> String {
     let mut document = Html::parse_document(html);
 
@@ -53,8 +66,6 @@ pub fn simplify(html: &str, lang: &str) -> String {
         }
 
         remove_ids(&mut document, to_remove.drain(..));
-    } else {
-        warn!("No sections to remove configured for lang {lang:?}");
     }
 
     for el in document
@@ -62,7 +73,7 @@ pub fn simplify(html: &str, lang: &str) -> String {
         .descendants()
         .filter_map(ElementRef::wrap)
     {
-        if is_image(&el) || is_empty_or_whitespace(&el) {
+        if (is_image(&el) || is_empty_or_whitespace(&el)) && !ELEMENT_ALLOW_LIST.matches(&el) {
             to_remove.push(el.id());
         }
     }
