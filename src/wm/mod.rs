@@ -109,7 +109,7 @@ pub fn parse_osm_tag_file(
 
         let title = &row[title_col].trim();
         if !title.is_empty() {
-            match WikipediaTitleNorm::_from_osm_tag(title) {
+            match WikipediaTitleNorm::from_osm_tag(title) {
                 Ok(title) => {
                     titles.insert(title);
                 }
@@ -185,7 +185,13 @@ impl WikidataQid {
 ///
 /// let title = WikipediaTitleNorm::from_title("Article Title", "en").unwrap();
 /// let url = WikipediaTitleNorm::from_url("https://en.wikipedia.org/wiki/Article_Title#Section").unwrap();
+/// let mobile = WikipediaTitleNorm::from_url("https://en.m.wikipedia.org/wiki/Article_Title#Section").unwrap();
+/// let url_tag1 = WikipediaTitleNorm::from_osm_tag("https://en.m.wikipedia.org/wiki/Article_Title#Section").unwrap();
+/// let url_tag2 = WikipediaTitleNorm::from_osm_tag("de:https://en.m.wikipedia.org/wiki/Article_Title#Section").unwrap();
 /// assert_eq!(url, title);
+/// assert_eq!(url, mobile);
+/// assert_eq!(url, url_tag1);
+/// assert_eq!(url, url_tag2);
 ///
 /// assert!(WikipediaTitleNorm::from_url("https://en.wikipedia.org/not_a_wiki_page").is_err());
 /// assert!(WikipediaTitleNorm::from_url("https://wikidata.org/wiki/Q12345").is_err());
@@ -199,6 +205,12 @@ impl WikidataQid {
 pub struct WikipediaTitleNorm {
     lang: String,
     name: String,
+}
+
+impl Display for WikipediaTitleNorm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.lang, self.name)
+    }
 }
 
 impl WikipediaTitleNorm {
@@ -216,6 +228,7 @@ impl WikipediaTitleNorm {
             .ok_or_else(|| anyhow!("Expected host"))?
             .split_once('.')
             .ok_or_else(|| anyhow!("Expected subdomain"))?;
+        let host = host.strip_prefix("m.").unwrap_or(host);
         if host != "wikipedia.org" {
             bail!("Expected wikipedia.org for domain")
         }
@@ -238,11 +251,22 @@ impl WikipediaTitleNorm {
     }
 
     // en:Article Title
-    fn _from_osm_tag(tag: &str) -> anyhow::Result<Self> {
+    pub fn from_osm_tag(tag: &str) -> anyhow::Result<Self> {
         let (lang, title) = tag
             .trim()
             .split_once(':')
             .ok_or_else(|| anyhow!("Expected ':'"))?;
+
+        let lang = lang.trim_start();
+        let title = title.trim_start();
+
+        if matches!(lang, "http" | "https") {
+            return Self::from_url(tag);
+        }
+
+        if title.starts_with("http://") || title.starts_with("https://") {
+            return Self::from_url(title);
+        }
 
         Self::from_title(title, lang)
     }
