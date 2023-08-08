@@ -13,7 +13,7 @@ It defines article sections that are not important for users and should be remov
 ## Usage
 
 To use with the map generator, see the [`run.sh` script](run.sh) and its own help documentation.
-It handles preparing the inputs, using multiple dumps, and re-running to convert titles to QIDs and extract them across languages.
+It handles extracting the tags, using multiple dumps, and re-running to convert titles to QIDs and extract them across languages.
 
 To run the wikiparser manually or for development, see below.
 
@@ -29,41 +29,64 @@ Run the program with the `--help` flag to see all supported arguments.
 
 ```
 $ cargo run --release -- --help
-Extract article HTML from Wikipedia Enterprise HTML dumps.
+Extract articles from Wikipedia Enterprise HTML dumps
 
-Expects an uncompressed dump connected to stdin.
+Usage: om-wikiparser <COMMAND>
 
-Usage: om-wikiparser [OPTIONS] <OUTPUT_DIR>
+Commands:
+  get-articles  Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps
+  get-tags      Extract wikidata/wikipedia tags from an OpenStreetMap PBF dump
+  simplify      Apply the same html article simplification used when extracting articles to stdin, and write it to stdout
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help (see more with '--help')
+  -V, --version  Print version
+```
+
+Each command has its own additional help:
+
+```
+$ cargo run -- get-articles --help
+Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
+
+Expects an uncompressed dump (newline-delimited JSON) connected to stdin.
+
+Usage: om-wikiparser get-articles [OPTIONS] <OUTPUT_DIR>
 
 Arguments:
   <OUTPUT_DIR>
           Directory to write the extracted articles to
 
 Options:
-      --write-new-ids <WRITE_NEW_IDS>
+      --write-new-qids <FILE>
           Append to the provided file path the QIDs of articles matched by title but not QID.
 
-          Use this to save the QIDs of articles you know the url of, but not the QID. The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
+          Use this to save the QIDs of articles you know the url of, but not the QID. The same path can later be passed to the `--wikidata-qids` option to extract them from another language's dump. Writes are atomicly appended to the file, so the same path may be used by multiple concurrent instances.
 
   -h, --help
           Print help (see a summary with '-h')
 
-  -V, --version
-          Print version
-
 FILTERS:
-      --wikidata-ids <WIKIDATA_IDS>
+      --osm-tags <FILE.tsv>
+          Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
+
+          This can be generated with the `get-tags` command or `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
+
+      --wikidata-qids <FILE>
           Path to file that contains a Wikidata QID to extract on each line (e.g. `Q12345`)
 
-      --wikipedia-urls <WIKIPEDIA_URLS>
+      --wikipedia-urls <FILE>
           Path to file that contains a Wikipedia article url to extract on each line (e.g. `https://lang.wikipedia.org/wiki/Article_Title`)
 ```
 
 It takes as inputs:
 - A wikidata enterprise JSON dump, extracted and connected to `stdin`.
-- A file of Wikidata QIDs to extract, one per line (e.g. `Q12345`), passed as the CLI flag `--wikidata-ids`.
-- A file of Wikipedia article titles to extract, one per line (e.g. `https://$LANG.wikipedia.org/wiki/$ARTICLE_TITLE`), passed as a CLI flag `--wikipedia-urls`.
 - A directory to write the extracted articles to, as a CLI argument.
+- Any number of filters passed:
+  - A TSV file of wikidata qids and wikipedia urls, created by the `get-tags` command or `osmconvert`, passed as the CLI flag `--osm-tags`.
+  - A file of Wikidata QIDs to extract, one per line (e.g. `Q12345`), passed as the CLI flag `--wikidata-ids`.
+  - A file of Wikipedia article titles to extract, one per line (e.g. `https://$LANG.wikipedia.org/wiki/$ARTICLE_TITLE`), passed as a CLI flag `--wikipedia-urls`.
 
 As an example of manual usage with the map generator:
 - Assuming this program is installed to `$PATH` as `om-wikiparser`.
@@ -74,7 +97,7 @@ As an example of manual usage with the map generator:
 
 ```shell
 # Transform intermediate files from generator.
-cut -f 2 id_to_wikidata.csv > wikidata_ids.txt
+cut -f 2 id_to_wikidata.csv > wikidata_qids.txt
 tail -n +2 wiki_urls.txt | cut -f 3 > wikipedia_urls.txt
 # Enable backtraces in errors and panics.
 export RUST_BACKTRACE=1
@@ -83,9 +106,38 @@ export RUST_LOG=om_wikiparser=debug
 # Begin extraction.
 for dump in $DUMP_DOWNLOAD_DIR/*-ENTERPRISE-HTML.json.tar.gz
 do
-  tar xzf $dump | om-wikiparser \
-    --wikidata-ids wikidata_ids.txt \
+  tar xzf $dump | om-wikiparser get-articles \
+    --wikidata-ids wikidata_qids.txt \
     --wikipedia-urls wikipedia_urls.txt \
+    --write-new-qids new_qids.txt \
+    descriptions/
+done
+# Extract discovered QIDs.
+for dump in $DUMP_DOWNLOAD_DIR/*-ENTERPRISE-HTML.json.tar.gz
+do
+  tar xzf $dump | om-wikiparser get-articles \
+    --wikidata-ids new_qids.txt \
+    descriptions/
+done
+```
+
+Alternatively, extract the tags directly from a `.osm.pbf` file (referenced here as `planet-latest.osm.pbf`):
+```shell
+# Extract tags
+om-wikiparser get-tags planet-latest.osm.pbf > osm_tags.tsv
+# Begin extraction.
+for dump in $DUMP_DOWNLOAD_DIR/*-ENTERPRISE-HTML.json.tar.gz
+do
+  tar xzf $dump | om-wikiparser get-articles \
+    --osm-tags osm_tags.tsv \
+    --write-new-qids new_qids.txt \
+    descriptions/
+done
+# Extract discovered QIDs.
+for dump in $DUMP_DOWNLOAD_DIR/*-ENTERPRISE-HTML.json.tar.gz
+do
+  tar xzf $dump | om-wikiparser get-articles \
+    --wikidata-ids new_qids.txt \
     descriptions/
 done
 ```
