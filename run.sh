@@ -1,17 +1,16 @@
 #! /usr/bin/env bash
 # shellcheck disable=SC2016 # Backticks not used as expansions in documentation.
-USAGE='Usage: ./run.sh [-h] <BUILD_DIR> <DUMP_FILE.json.tar.gz> [<DUMP_FILE.json.tar.gz>...]
+USAGE='Usage: ./run.sh [-h] <BUILD_DIR> <OSM_FILE.osm.pbf> <DUMP_FILE.json.tar.gz> [<DUMP_FILE.json.tar.gz>...]
 
 A convenience script to run the wikiparser with the maps generator as a drop-in replacement for the descriptions scraper.
 
 Arguments:
     <BUILD_DIR> An existing directory to place descriptions in.
-                The `id_to_wikidata.csv` and `wiki_urls.txt` files output by the
-                maps generator must be placed in this directory before running.
                 The extracted articles will be placed in a `descriptions`
                 subdirectory within this directory.
                 The `intermediate_data` subfolder of a maps build directory may
                 be used for this. The same folder may be used for multiple runs.
+    <OSM_FILE>  An OpenStreetMap dump in PBF format to extract tags from.
     <DUMP_FILE> A wikipedia enterprise html dump. These take the form of
                 `enwiki-NS0-20230401-ENTERPRISE-HTML.json.tar.gz`. Multiple
                 dumps in the same language SHOULD NOT be provided, and will
@@ -21,7 +20,7 @@ Options:
     -h      Print this help screen
 
 1. Builds wikiparser.
-2. Extracts wikidata ids and wikipedia urls from generator intermediate files `id_to_wikidata.csv` and `wiki_urls.txt`.
+2. Extracts wikidata qids and wikipedia urls from OpenStreetMap pbf file (NOTE: this spawns as many threads as there are cores).
 3. Runs wikiparser in parallel for all input dump files (NOTE: this currently starts 2 processes for each dump files).
 
 For information on running the wikiparser manually, see README.md.
@@ -43,8 +42,8 @@ do
 done
 shift $((OPTIND - 1))
 
-if [ -z "${2-}" ]; then
-    echo "BUILD_DIR and at least one DUMP_FILE are required" >&2
+if [ -z "${3-}" ]; then
+    echo "BUILD_DIR, OSM_FILE, and at least one DUMP_FILE are required" >&2
     echo -n "$USAGE" >&2
     exit 1
 fi
@@ -55,6 +54,13 @@ BUILD_DIR=$(readlink -f -- "$1")
 shift
 if [ ! -d "$BUILD_DIR" ]; then
     echo "BUILD_DIR '$BUILD_DIR' does not exist or is not a directory" >&2
+    exit 1
+fi
+
+OSM_FILE=$(readlink -f -- "$1")
+shift
+if [ ! -f "$OSM_FILE" ]; then
+    echo "OSM_FILE '$OSM_FILE' does not exist or is not a file" >&2
     exit 1
 fi
 
@@ -91,16 +97,8 @@ wikiparser=$(pwd)/target/release/om-wikiparser
 log "Changing to maps build dir '$BUILD_DIR'"
 cd "$BUILD_DIR"
 
-log "Transforming intermediate generator data"
-for intermediate_file in id_to_wikidata.csv wiki_urls.txt; do
-    if [ ! -e "$intermediate_file" ]; then
-        echo -e "Cannot find intermediate generator file '$intermediate_file' in maps build dir '$BUILD_DIR/'\nWas the descriptions step run?" >&2
-        exit 1
-    fi
-done
-
-cut -f 2 id_to_wikidata.csv > wikidata_ids.txt
-tail -n +2 wiki_urls.txt | cut -f 3 > wikipedia_urls.txt
+log "Extracting tags from '$OSM_FILE'"
+"$wikiparser" get-tags "$OSM_FILE" > osm_tags.tsv
 
 # Enable backtraces in errors and panics.
 export RUST_BACKTRACE=1
@@ -129,10 +127,9 @@ trap 'kill_jobs' SIGINT SIGTERM EXIT
 
 for dump in "${DUMP_FILES[@]}"; do
   log "Extracting '$dump'"
-  tar xzOf "$dump" | "$wikiparser" \
-    --wikidata-ids wikidata_ids.txt \
-    --wikipedia-urls wikipedia_urls.txt \
-    --write-new-ids new_qids.txt \
+  tar xzOf "$dump" | "$wikiparser" get-articles \
+    --osm-tags osm_tags.tsv \
+    --write-new-qids new_qids.txt \
     "$OUTPUT_DIR" &
 done
 
@@ -142,8 +139,8 @@ log "Beginning extraction of discovered QIDs"
 
 # Extract new qids from other dumps in parallel.
 for dump in "${DUMP_FILES[@]}"; do
-  tar xzOf "$dump" | "$wikiparser" \
-    --wikidata-ids new_qids.txt \
+  tar xzOf "$dump" | "$wikiparser" get-articles \
+    --wikidata-qids new_qids.txt \
     "$OUTPUT_DIR" &
 done
 

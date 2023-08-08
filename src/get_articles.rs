@@ -12,7 +12,7 @@ use om_wikiparser::{
     wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
 };
 
-/// Extract article HTML from Wikipedia Enterprise HTML dumps.
+/// Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
 ///
 /// Expects an uncompressed dump (newline-delimited JSON) connected to stdin.
 #[derive(clap::Args)]
@@ -22,27 +22,27 @@ pub struct Args {
 
     /// Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
     ///
-    /// This can be generated with `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
-    #[arg(long, help_heading = "FILTERS")]
+    /// This can be generated with the `get-tags` command or `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
+    #[arg(long, help_heading = "FILTERS", value_name = "FILE.tsv")]
     pub osm_tags: Option<PathBuf>,
 
     /// Path to file that contains a Wikidata QID to extract on each line
     /// (e.g. `Q12345`).
-    #[arg(long, help_heading = "FILTERS")]
-    pub wikidata_ids: Option<PathBuf>,
+    #[arg(long, help_heading = "FILTERS", value_name = "FILE")]
+    pub wikidata_qids: Option<PathBuf>,
 
     /// Path to file that contains a Wikipedia article url to extract on each line
     /// (e.g. `https://lang.wikipedia.org/wiki/Article_Title`).
-    #[arg(long, help_heading = "FILTERS")]
+    #[arg(long, help_heading = "FILTERS", value_name = "FILE")]
     pub wikipedia_urls: Option<PathBuf>,
 
     /// Append to the provided file path the QIDs of articles matched by title but not QID.
     ///
     /// Use this to save the QIDs of articles you know the url of, but not the QID.
-    /// The same path can later be passed to the `--wikidata-ids` option to extract them from another language's dump.
+    /// The same path can later be passed to the `--wikidata-qids` option to extract them from another language's dump.
     /// Writes are atomicly appended to the file, so the same path may be used by multiple concurrent instances.
-    #[arg(long, requires("wikipedia_urls"))]
-    pub write_new_ids: Option<PathBuf>,
+    #[arg(long, value_name = "FILE")]
+    pub write_new_qids: Option<PathBuf>,
 }
 
 pub fn run(args: Args) -> anyhow::Result<()> {
@@ -53,8 +53,8 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         Default::default()
     };
 
-    let mut wikidata_ids = if let Some(path) = args.wikidata_ids {
-        info!("Loading wikidata ids from {path:?}");
+    let mut wikidata_qids = if let Some(path) = args.wikidata_qids {
+        info!("Loading wikidata QIDs from {path:?}");
         parse_wikidata_file(path)?
     } else {
         Default::default()
@@ -62,11 +62,11 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 
     if let Some(path) = args.osm_tags {
         info!("Loading wikipedia/wikidata osm tags from {path:?}");
-        parse_osm_tag_file(path, &mut wikidata_ids, &mut wikipedia_titles)?;
+        parse_osm_tag_file(path, &mut wikidata_qids, &mut wikipedia_titles)?;
     }
 
-    debug!("Parsed {} unique article urls", wikipedia_titles.len());
-    debug!("Parsed {} unique wikidata ids", wikidata_ids.len());
+    debug!("Parsed {} unique article titles", wikipedia_titles.len());
+    debug!("Parsed {} unique wikidata QIDs", wikidata_qids.len());
 
     // NOTE: For atomic writes to the same file across threads/processes:
     // - The file needs to be opened in APPEND mode (`.append(true)`).
@@ -77,8 +77,8 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     // - `man write(3posix)`: https://www.man7.org/linux/man-pages/man3/write.3p.html
     // - `std::fs::OpenOptions::append`: https://doc.rust-lang.org/std/fs/struct.OpenOptions.html#method.append
     // - https://stackoverflow.com/questions/1154446/is-file-append-atomic-in-unix
-    let mut write_new_ids = args
-        .write_new_ids
+    let mut write_new_qids = args
+        .write_new_qids
         .as_ref()
         .map(|p| File::options().create(true).append(true).open(p))
         .transpose()?;
@@ -105,7 +105,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 
         let is_wikidata_match = qid
             .as_ref()
-            .map(|qid| wikidata_ids.contains(qid))
+            .map(|qid| wikidata_qids.contains(qid))
             .unwrap_or_default();
 
         let matching_titles = if wikipedia_titles.is_empty() {
@@ -127,16 +127,16 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         }
 
         // Write matched new QIDs back to file.
-        if let (Some(f), Some(qid)) = (&mut write_new_ids, &qid) {
+        if let (Some(f), Some(qid)) = (&mut write_new_qids, &qid) {
             if !is_wikidata_match && !matching_titles.is_empty() {
                 debug!("Writing new id {} for article {:?}", qid, page.name);
                 // NOTE: Write to string buffer first to have a single atomic write syscall.
-                // See `write_new_ids` for more info.
+                // See `write_new_qids` for more info.
                 let line = format!("{}\n", qid);
                 write!(f, "{}", line).with_context(|| {
                     format!(
-                        "writing new id to file {:?}",
-                        args.write_new_ids.as_ref().unwrap()
+                        "writing new QID to file {:?}",
+                        args.write_new_qids.as_ref().unwrap()
                     )
                 })?;
             }
