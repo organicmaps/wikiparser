@@ -2,7 +2,7 @@ use std::{iter, str::FromStr};
 
 use serde::Deserialize;
 
-use super::{WikidataQid, WikipediaTitleNorm};
+use super::{Qid, Title};
 
 // TODO: consolidate into single struct
 /// Deserialized Wikimedia Enterprise API Article
@@ -25,27 +25,27 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn wikidata(&self) -> Option<WikidataQid> {
+    pub fn wikidata(&self) -> Option<Qid> {
         // TODO: return error
         self.main_entity
             .as_ref()
-            .map(|e| WikidataQid::from_str(&e.identifier).unwrap())
+            .map(|e| Qid::from_str(&e.identifier).unwrap())
     }
 
     /// Title of the article
-    pub fn title(&self) -> anyhow::Result<WikipediaTitleNorm> {
-        WikipediaTitleNorm::from_title(&self.name, &self.in_language.identifier)
+    pub fn title(&self) -> anyhow::Result<Title> {
+        Title::from_title(&self.name, &self.in_language.identifier)
     }
 
     /// All titles that lead to the article, the main title followed by any redirects.
-    pub fn all_titles(&self) -> impl Iterator<Item = anyhow::Result<WikipediaTitleNorm>> + '_ {
+    pub fn all_titles(&self) -> impl Iterator<Item = anyhow::Result<Title>> + '_ {
         iter::once(self.title()).chain(self.redirects())
     }
 
-    pub fn redirects(&self) -> impl Iterator<Item = anyhow::Result<WikipediaTitleNorm>> + '_ {
+    pub fn redirects(&self) -> impl Iterator<Item = anyhow::Result<Title>> + '_ {
         self.redirects
             .iter()
-            .map(|r| WikipediaTitleNorm::from_title(&r.name, &self.in_language.identifier))
+            .map(|r| Title::from_title(&r.name, &self.in_language.identifier))
     }
 }
 

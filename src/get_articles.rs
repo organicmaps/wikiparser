@@ -9,7 +9,7 @@ use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
     html::simplify,
-    wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, WikipediaTitleNorm},
+    wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, Title},
 };
 
 /// Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
@@ -154,7 +154,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 fn create_article_dir(
     base: impl AsRef<Path>,
     page: &Page,
-    redirects: impl IntoIterator<Item = WikipediaTitleNorm>,
+    redirects: impl IntoIterator<Item = Title>,
 ) -> anyhow::Result<PathBuf> {
     let base = base.as_ref();
     let mut redirects = redirects.into_iter();
@@ -237,7 +237,7 @@ fn create_article_dir(
 fn write(
     base: impl AsRef<Path>,
     page: &Page,
-    redirects: impl IntoIterator<Item = WikipediaTitleNorm>,
+    redirects: impl IntoIterator<Item = Title>,
 ) -> anyhow::Result<()> {
     let article_dir = create_article_dir(base, page, redirects)?;
 

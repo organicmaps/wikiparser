@@ -4,22 +4,21 @@ use std::{collections::HashSet, str::FromStr};
 extern crate om_wikiparser;
 extern crate test;
 
+use om_wikiparser::wm::{Qid, Title};
+
+const TITLE: &str = "https://en.wikipedia.org/wiki/Article_Title";
+const QID: &str = "Q123456789";
+
 #[bench]
 fn parse_wikipedia(b: &mut test::Bencher) {
     b.iter(|| {
-        let title = om_wikiparser::wm::WikipediaTitleNorm::from_url(
-            "https://en.wikipedia.org/wiki/Article_Title",
-        )
-        .unwrap();
+        Title::from_url(TITLE).unwrap();
     });
 }
 
 #[bench]
 fn hash_wikipedia(b: &mut test::Bencher) {
-    let title = om_wikiparser::wm::WikipediaTitleNorm::from_url(
-        "https://en.wikipedia.org/wiki/Article_Title",
-    )
-    .unwrap();
+    let title = Title::from_url(TITLE).unwrap();
     let mut set = HashSet::new();
     b.iter(|| {
         set.insert(&title);
@@ -29,13 +28,13 @@ fn hash_wikipedia(b: &mut test::Bencher) {
 #[bench]
 fn parse_wikidata(b: &mut test::Bencher) {
     b.iter(|| {
-        let qid = om_wikiparser::wm::WikidataQid::from_str("Q123456789").unwrap();
+        Qid::from_str(QID).unwrap();
     });
 }
 
 #[bench]
 fn hash_wikidata(b: &mut test::Bencher) {
-    let qid = om_wikiparser::wm::WikidataQid::from_str("Q123456789").unwrap();
+    let qid = Qid::from_str(QID).unwrap();
     let mut set = HashSet::new();
     b.iter(|| {
         set.insert(&qid);
