@@ -60,9 +60,34 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         Default::default()
     };
 
-    if let Some(path) = args.osm_tags {
+    if let Some(ref path) = args.osm_tags {
         info!("Loading wikipedia/wikidata osm tags from {path:?}");
-        parse_osm_tag_file(path, &mut wikidata_qids, &mut wikipedia_titles)?;
+
+        let original_items = wikidata_qids.len() + wikipedia_titles.len();
+        let mut line_errors = Vec::new();
+        parse_osm_tag_file(
+            path,
+            &mut wikidata_qids,
+            &mut wikipedia_titles,
+            Some(&mut line_errors),
+        )?;
+
+        if !line_errors.is_empty() {
+            let error_count = line_errors.len();
+            let new_items = wikidata_qids.len() + wikipedia_titles.len() - original_items;
+            let expected_threshold = 0.02;
+            let percentage = 100.0 * error_count as f64 / new_items as f64;
+            let level = if percentage >= expected_threshold {
+                log::Level::Error
+            } else {
+                log::Level::Info
+            };
+
+            log!(
+                level,
+                "{error_count} errors ({percentage:.4}%) parsing osm tags from {path:?}",
+            );
+        }
     }
 
     debug!("Parsed {} unique article titles", wikipedia_titles.len());

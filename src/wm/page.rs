@@ -1,5 +1,6 @@
 use std::{iter, str::FromStr};
 
+use anyhow::Context;
 use serde::Deserialize;
 
 use super::{Qid, Title};
@@ -35,6 +36,7 @@ impl Page {
     /// Title of the article
     pub fn title(&self) -> anyhow::Result<Title> {
         Title::from_title(&self.name, &self.in_language.identifier)
+            .with_context(|| format!("bad title {:?}", self.name))
     }
 
     /// All titles that lead to the article, the main title followed by any redirects.
@@ -43,9 +45,10 @@ impl Page {
     }
 
     pub fn redirects(&self) -> impl Iterator<Item = anyhow::Result<Title>> + '_ {
-        self.redirects
-            .iter()
-            .map(|r| Title::from_title(&r.name, &self.in_language.identifier))
+        self.redirects.iter().map(|r| {
+            Title::from_title(&r.name, &self.in_language.identifier)
+                .with_context(|| format!("bad redirect {:?}", self.name))
+        })
     }
 }
 

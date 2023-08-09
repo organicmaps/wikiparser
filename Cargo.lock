@@ -692,6 +692,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "thiserror",
  "url",
  "urlencoding",
 ]
