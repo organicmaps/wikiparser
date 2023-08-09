@@ -1,6 +1,4 @@
-use std::{fmt::Display, path::PathBuf};
-
-use anyhow::{anyhow, bail};
+use std::{fmt::Display, path::PathBuf, string::FromUtf8Error};
 
 use url::Url;
 
@@ -49,17 +47,17 @@ impl Title {
     }
 
     // https://en.wikipedia.org/wiki/Article_Title/More_Title
-    pub fn from_url(url: &str) -> anyhow::Result<Self> {
+    pub fn from_url(url: &str) -> Result<Self, ParseTitleError> {
         let url = Url::parse(url.trim())?;
 
         let (subdomain, host) = url
             .host_str()
-            .ok_or_else(|| anyhow!("Expected host"))?
+            .ok_or(ParseTitleError::NoHost)?
             .split_once('.')
-            .ok_or_else(|| anyhow!("Expected subdomain"))?;
+            .ok_or(ParseTitleError::NoSubdomain)?;
         let host = host.strip_prefix("m.").unwrap_or(host);
         if host != "wikipedia.org" {
-            bail!("Expected wikipedia.org for domain")
+            return Err(ParseTitleError::BadDomain);
         }
         let lang = subdomain;
 
@@ -69,10 +67,10 @@ impl Title {
             .strip_prefix('/')
             .unwrap_or(path)
             .split_once('/')
-            .ok_or_else(|| anyhow!("Expected at least two segments in path"))?;
+            .ok_or(ParseTitleError::ShortPath)?;
 
         if root != "wiki" {
-            bail!("Expected 'wiki' as root path, got: {:?}", root)
+            return Err(ParseTitleError::BadPath);
         }
         let title = urlencoding::decode(title)?;
 
@@ -80,11 +78,11 @@ impl Title {
     }
 
     // en:Article Title
-    pub fn from_osm_tag(tag: &str) -> anyhow::Result<Self> {
+    pub fn from_osm_tag(tag: &str) -> Result<Self, ParseTitleError> {
         let (lang, title) = tag
             .trim()
             .split_once(':')
-            .ok_or_else(|| anyhow!("Expected ':'"))?;
+            .ok_or(ParseTitleError::MissingColon)?;
 
         let lang = lang.trim_start();
         let title = title.trim_start();
@@ -100,14 +98,14 @@ impl Title {
         Self::from_title(title, lang)
     }
 
-    pub fn from_title(title: &str, lang: &str) -> anyhow::Result<Self> {
+    pub fn from_title(title: &str, lang: &str) -> Result<Self, ParseTitleError> {
         let title = title.trim();
         let lang = lang.trim();
         if title.is_empty() {
-            bail!("title cannot be empty or whitespace");
+            return Err(ParseTitleError::NoTitle);
         }
         if lang.is_empty() {
-            bail!("lang cannot be empty or whitespace");
+            return Err(ParseTitleError::NoLang);
         }
         let name = Self::normalize_title(title);
         let lang = lang.to_owned();
@@ -123,4 +121,30 @@ impl Title {
 
         path
     }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ParseTitleError {
+    #[error("title cannot be empty or whitespace")]
+    NoTitle,
+    #[error("lang cannot be empty or whitespace")]
+    NoLang,
+    #[error("no ':' separating lang and title")]
+    MissingColon,
+
+    // url-specific
+    #[error("cannot parse url")]
+    Url(#[from] url::ParseError),
+    #[error("cannot decode url")]
+    UrlDecode(#[from] FromUtf8Error),
+    #[error("no host in url")]
+    NoHost,
+    #[error("no subdomain in url")]
+    NoSubdomain,
+    #[error("url base domain is wikipedia.org")]
+    BadDomain,
+    #[error("url base path is not /wiki/")]
+    BadPath,
+    #[error("path has less than 2 segments")]
+    ShortPath,
 }

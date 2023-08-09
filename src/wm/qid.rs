@@ -1,4 +1,4 @@
-use std::{fmt::Display, num::ParseIntError, path::PathBuf, str::FromStr};
+use std::{error::Error, fmt::Display, num::ParseIntError, path::PathBuf, str::FromStr};
 
 /// Wikidata QID/Q Number
 ///
@@ -21,15 +21,13 @@ use std::{fmt::Display, num::ParseIntError, path::PathBuf, str::FromStr};
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct Qid(u32);
 
-pub type ParseQidError = ParseIntError;
-
 impl FromStr for Qid {
     type Err = ParseQidError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
         let s = s.strip_prefix(['Q', 'q']).unwrap_or(s);
-        u32::from_str(s).map(Qid)
+        u32::from_str(s).map(Qid).map_err(ParseQidError)
     }
 }
 
@@ -47,5 +45,20 @@ impl Qid {
         path.push(self.to_string());
 
         path
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseQidError(ParseIntError);
+
+impl Display for ParseQidError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Error for ParseQidError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
     }
 }

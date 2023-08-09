@@ -1,7 +1,7 @@
 //! Wikimedia types
-use std::{collections::HashSet, ffi::OsStr, fs, str::FromStr};
+use std::{collections::HashSet, error::Error, ffi::OsStr, fmt::Display, fs, str::FromStr};
 
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, bail, Context};
 
 mod page;
 pub use page::Page;
@@ -58,9 +58,17 @@ pub fn parse_osm_tag_file(
     path: impl AsRef<OsStr>,
     qids: &mut HashSet<Qid>,
     titles: &mut HashSet<Title>,
+    mut line_errors: Option<&mut Vec<ParseLineError>>,
 ) -> anyhow::Result<()> {
     let path = path.as_ref();
     let mut rdr = csv::ReaderBuilder::new().delimiter(b'\t').from_path(path)?;
+
+    let mut push_error = |e: ParseLineError| {
+        debug!("Tag parse error: {e}");
+        if let Some(ref mut errs) = line_errors {
+            errs.push(e);
+        }
+    };
 
     let mut qid_col = None;
     let mut title_col = None;
@@ -83,7 +91,14 @@ pub fn parse_osm_tag_file(
             Ok(false) => break,
             // attempt to recover from parsing errors
             Err(e) => {
-                error!("Error parsing tsv file: {}", e);
+                if e.is_io_error() {
+                    bail!(e)
+                }
+                push_error(ParseLineError {
+                    text: String::new(),
+                    line: rdr.position().line(),
+                    kind: e.into(),
+                });
                 continue;
             }
         }
@@ -94,13 +109,11 @@ pub fn parse_osm_tag_file(
                 Ok(qid) => {
                     qids.insert(qid);
                 }
-                Err(e) => warn!(
-                    "Cannot parse qid {:?} on line {} in {:?}: {}",
-                    qid,
-                    rdr.position().line(),
-                    path,
-                    e
-                ),
+                Err(e) => push_error(ParseLineError {
+                    text: qid.to_string(),
+                    line: rdr.position().line(),
+                    kind: e.into(),
+                }),
             }
         }
 
@@ -110,16 +123,51 @@ pub fn parse_osm_tag_file(
                 Ok(title) => {
                     titles.insert(title);
                 }
-                Err(e) => warn!(
-                    "Cannot parse title {:?} on line {} in {:?}: {}",
-                    title,
-                    rdr.position().line(),
-                    path,
-                    e
-                ),
+                Err(e) => push_error(ParseLineError {
+                    text: title.to_string(),
+                    line: rdr.position().line(),
+                    kind: e.into(),
+                }),
             }
         }
     }
 
     Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseErrorKind {
+    #[error("bad title")]
+    Title(#[from] ParseTitleError),
+    #[error("bad QID")]
+    Qid(#[from] ParseQidError),
+    #[error("bad TSV line")]
+    Tsv(#[from] csv::Error),
+}
+
+#[derive(Debug)]
+pub struct ParseLineError {
+    text: String,
+    line: u64,
+    kind: ParseErrorKind,
+}
+
+impl Display for ParseLineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // write source chain to ensure they are logged
+        write!(f, "on line {}: {:?}: {}", self.line, self.text, self.kind)?;
+        let mut source = self.kind.source();
+        while let Some(e) = source {
+            write!(f, ": {}", e)?;
+            source = e.source();
+        }
+        Ok(())
+    }
+}
+
+impl Error for ParseLineError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        // return nothing b/c Display prints source chain
+        None
+    }
 }
