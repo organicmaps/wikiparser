@@ -52,10 +52,12 @@ pub fn simplify(html: &str, lang: &str) -> String {
             if bad_sections.contains(&title.trim()) {
                 to_remove.push(header.id());
                 let header_level = header.value().name();
+                trace!("Removing section for header {header_level} {title:?}");
                 // Strip trailing nodes.
                 for sibling in header.next_siblings() {
                     if let Some(element) = sibling.value().as_element() {
                         if element.name() == header_level {
+                            trace!("Stopping removal at {}", element.name(),);
                             // TODO: Should this check for a higher level?
                             break;
                         }

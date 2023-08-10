@@ -3,6 +3,7 @@ use std::{
     io::{stdin, stdout, BufReader, Read, Write},
     num::NonZeroUsize,
     path::PathBuf,
+    time::Instant,
 };
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -89,7 +90,18 @@ fn main() -> anyhow::Result<()> {
             let mut input = String::new();
             stdin().read_to_string(&mut input)?;
 
+            let start = Instant::now();
             let output = om_wikiparser::html::simplify(&input, &lang);
+            let stop = Instant::now();
+            let time = stop.duration_since(start);
+
+            {
+                let input_size = input.len() as isize;
+                let output_size = output.len() as isize;
+                let difference = input_size - output_size;
+                let scale = input_size as f64 / output_size as f64;
+                info!("Reduced size by {difference} bytes ({scale:.4}x) in {time:?}");
+            }
 
             stdout().write_all(output.as_bytes())?;
 
