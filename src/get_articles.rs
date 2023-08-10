@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
-    html::simplify,
+    html,
     wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, Title},
 };
 
@@ -43,6 +43,10 @@ pub struct Args {
     /// Writes are atomicly appended to the file, so the same path may be used by multiple concurrent instances.
     #[arg(long, value_name = "FILE")]
     pub write_new_qids: Option<PathBuf>,
+
+    /// Don't process extracted HTML; write the original text to disk.
+    #[arg(long)]
+    pub no_simplify: bool,
 }
 
 pub fn run(args: Args) -> anyhow::Result<()> {
@@ -167,7 +171,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
             }
         }
 
-        if let Err(e) = write(&args.output_dir, &page, matching_titles) {
+        if let Err(e) = write(&args.output_dir, &page, matching_titles, !args.no_simplify) {
             error!("Error writing article {:?}: {:#}", page.name, e);
         }
     }
@@ -263,6 +267,7 @@ fn write(
     base: impl AsRef<Path>,
     page: &Page,
     redirects: impl IntoIterator<Item = Title>,
+    simplify: bool,
 ) -> anyhow::Result<()> {
     let article_dir = create_article_dir(base, page, redirects)?;
 
@@ -277,7 +282,11 @@ fn write(
         debug!("Overwriting existing file");
     }
 
-    let html = simplify(&page.article_body.html, &page.in_language.identifier);
+    let html = if simplify {
+        html::simplify(&page.article_body.html, &page.in_language.identifier)
+    } else {
+        page.article_body.html.to_string()
+    };
 
     let mut file =
         File::create(&filename).with_context(|| format!("creating html file {:?}", filename))?;
