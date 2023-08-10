@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ego_tree::NodeId;
+use markup5ever::{local_name, LocalName, Namespace, QualName};
 use once_cell::sync::Lazy;
-use scraper::{ElementRef, Html, Selector};
+use scraper::{ElementRef, Html, Node, Selector};
 use serde::Deserialize;
 
 mod pretty;
@@ -32,6 +33,38 @@ static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
             // Meta tags that affect rendering.
             "head > meta[charset]",
             "head > meta[http-equiv]",
+        ]
+        .join(", "),
+    )
+    .unwrap()
+});
+
+/// Elements that should be removed.
+static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
+    Selector::parse(
+        &[
+            // From the Extracts API config `extension.json`: https://phabricator.wikimedia.org/diffusion/ETEX/browse/master/extension.json
+            "table",
+            "div",
+            "figure",
+            "script",
+            "input",
+            "style",
+            "ul.gallery",
+            ".mw-editsection",
+            "sup.reference",
+            "ol.references",
+            ".error",
+            ".nomobile",
+            ".noprint",
+            ".noexcerpt",
+            ".sortkey",
+            // Media elements.
+            "img",
+            "audio",
+            "video",
+            "figure",
+            "embed",
         ]
         .join(", "),
     )
@@ -82,13 +115,17 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
         .descendants()
         .filter_map(ElementRef::wrap)
     {
-        if (is_image(&el) || is_empty_or_whitespace(&el)) && !ELEMENT_ALLOW_LIST.matches(&el) {
+        if (ELEMENT_DENY_LIST.matches(&el) || is_empty_or_whitespace(&el))
+            && !ELEMENT_ALLOW_LIST.matches(&el)
+        {
             to_remove.push(el.id());
         }
     }
     remove_ids(document, to_remove.drain(..));
 
     remove_links(document);
+
+    remove_attrs(document);
 }
 
 fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
@@ -99,12 +136,40 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
     }
 }
 
-fn is_empty_or_whitespace(el: &ElementRef) -> bool {
-    el.text().flat_map(str::chars).all(char::is_whitespace)
+fn remove_attrs(document: &mut Html) {
+    // TODO: See if finding and skipping detached nodes is significantly faster.
+    let mut to_remove = Vec::new();
+    for node in document.tree.values_mut() {
+        let Node::Element(el) = node else { continue };
+
+        if el.name() == "span" {
+            for attr in ["style", "class"]
+                .iter()
+                .map(|attr| QualName::new(None, Namespace::from(""), LocalName::from(*attr)))
+            {
+                el.attrs.remove(&attr);
+            }
+        }
+
+        for (k, v) in el.attrs.iter() {
+            if (k.local == local_name!("id") && v.starts_with("mw"))
+                || k.local.starts_with("data-mw")
+                || ["prefix", "typeof", "about", "rel"]
+                    .iter()
+                    .any(|id| *id == &k.local)
+            {
+                to_remove.push(k.to_owned());
+            }
+        }
+
+        for k in to_remove.drain(..) {
+            el.attrs.remove(&k);
+        }
+    }
 }
 
-fn is_image(el: &ElementRef) -> bool {
-    ["img", "picture"].contains(&el.value().name())
+fn is_empty_or_whitespace(el: &ElementRef) -> bool {
+    el.text().flat_map(str::chars).all(char::is_whitespace)
 }
 
 /// Remove all links, preserving any inner elements/text.
