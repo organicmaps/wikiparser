@@ -127,7 +127,7 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
 
     remove_empty_sections(document);
 
-    remove_comments(document);
+    remove_non_element_nodes(document);
 
     expand_links(document);
 
@@ -144,10 +144,14 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
     }
 }
 
-fn remove_comments(document: &mut Html) {
+fn remove_non_element_nodes(document: &mut Html) {
     let mut to_remove = Vec::new();
-    for el in document.root_element().descendants() {
-        if el.value().is_comment() {
+    // `.root_element()` returns the first `Element` in the children of the
+    // root, which comments/doctypes are not.
+    // Use `root()` instead and `skip()` because `descendants` includes the
+    // node it is called on.
+    for el in document.tree.root().descendants().skip(1) {
+        if el.value().is_comment() || el.value().is_doctype() {
             to_remove.push(el.id());
         }
     }
@@ -234,7 +238,7 @@ fn final_expansions(document: &mut Html) {
         .filter_map(ElementRef::wrap)
     {
         if (el.value().name() == "span" && el.value().attrs().next().is_none())
-            || ["section", "body"].contains(&el.value().name())
+            || ["section", "body", "html"].contains(&el.value().name())
         {
             to_expand.push(el.id());
         }
