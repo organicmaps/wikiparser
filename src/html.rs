@@ -33,6 +33,10 @@ static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
             // Meta tags that affect rendering.
             "head > meta[charset]",
             "head > meta[http-equiv]",
+            // Content from other articles (expanded later)
+            // TODO: See if these are used in other ways.
+            "div.excerpt-block",
+            "div.excerpt",
         ]
         .join(", "),
     )
@@ -263,7 +267,7 @@ fn final_expansions(document: &mut Html) {
         .filter_map(ElementRef::wrap)
     {
         if (el.value().name() == "span" && el.value().attrs().next().is_none())
-            || ["section", "body", "html"].contains(&el.value().name())
+            || ["section", "div", "body", "html"].contains(&el.value().name())
         {
             to_expand.push(el.id());
         }
