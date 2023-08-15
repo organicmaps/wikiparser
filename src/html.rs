@@ -134,6 +134,8 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
     remove_attrs(document);
 
     final_expansions(document);
+
+    remove_toplevel_whitespace(document);
 }
 
 fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
@@ -155,6 +157,29 @@ fn remove_non_element_nodes(document: &mut Html) {
             to_remove.push(el.id());
         }
     }
+    remove_ids(document, to_remove.drain(..));
+}
+
+fn remove_toplevel_whitespace(document: &mut Html) {
+    let mut to_remove = Vec::new();
+
+    let parent = document.tree.root();
+
+    for el in parent.children() {
+        let Some(t) = el.value().as_text() else {
+            continue;
+        };
+
+        if t.chars().all(char::is_whitespace) {
+            to_remove.push(el.id());
+        }
+    }
+
+    trace!(
+        "Removing {} whitespace text nodes children from {:?}",
+        to_remove.len(),
+        parent.value(),
+    );
     remove_ids(document, to_remove.drain(..));
 }
 
