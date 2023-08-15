@@ -125,9 +125,11 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
 
     remove_comments(document);
 
-    remove_links(document);
+    expand_links(document);
 
     remove_attrs(document);
+
+    final_expansions(document);
 }
 
 fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
@@ -180,32 +182,66 @@ fn remove_attrs(document: &mut Html) {
     }
 }
 
+fn final_expansions(document: &mut Html) {
+    // Remove head.
+    if let Some(head) = document.select(&Selector::parse("head").unwrap()).next() {
+        if let Some(mut node) = document.tree.get_mut(head.id()) {
+            node.detach();
+        }
+    }
+
+    let mut to_expand = Vec::new();
+    for el in document
+        .root_element()
+        .descendants()
+        .filter_map(ElementRef::wrap)
+    {
+        if (el.value().name() == "span" && el.value().attrs().next().is_none())
+            || ["section", "body"].contains(&el.value().name())
+        {
+            to_expand.push(el.id());
+        }
+    }
+
+    trace!("Expanding {} elements", to_expand.len());
+
+    for id in to_expand {
+        expand_id(document, id);
+    }
+}
+
 fn is_empty_or_whitespace(el: &ElementRef) -> bool {
     el.text().flat_map(str::chars).all(char::is_whitespace)
 }
 
 /// Remove all links, preserving any inner elements/text.
-fn remove_links(document: &mut Html) {
+fn expand_links(document: &mut Html) {
     let links: Vec<_> = document
         .select(&Selector::parse("a").unwrap())
         .map(|el| el.id())
         .collect();
 
     for id in links {
-        let Some(mut node) = document.tree.get_mut(id) else { continue };
-        if node.parent().is_none() {
-            continue;
-        }
-
-        // reparent to same location as node
-        while let Some(mut child) = node.first_child() {
-            let child_id = child.id();
-            child.detach();
-            node.insert_id_before(child_id);
-        }
-
-        node.detach();
+        expand_id(document, id)
     }
+}
+
+/// Remove an element, leaving any children in its place.
+fn expand_id(document: &mut Html, id: NodeId) {
+    let Some(mut node) = document.tree.get_mut(id) else { return };
+    if node.parent().is_none() {
+        // Already detached.
+        return;
+    }
+
+    // reparent to same location as node
+    while let Some(mut child) = node.first_child() {
+        let child_id = child.id();
+        child.detach();
+        node.insert_id_before(child_id);
+    }
+
+    node.detach();
 }
 
 #[cfg(test)]
@@ -251,7 +287,7 @@ mod test {
         let link = document.select(&second_link).next().unwrap().id();
         document.tree.get_mut(link).unwrap().detach();
 
-        super::remove_links(&mut document);
+        super::expand_links(&mut document);
 
         let links: Vec<_> = document.select(&anchors).collect();
 
