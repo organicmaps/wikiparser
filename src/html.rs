@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ego_tree::NodeId;
-use markup5ever::{local_name, LocalName, Namespace, QualName};
+use markup5ever::{LocalName, Namespace, QualName};
 use once_cell::sync::Lazy;
 use scraper::{ElementRef, Html, Node, Selector};
 use serde::Deserialize;
@@ -263,12 +263,12 @@ fn remove_attrs(document: &mut Html) {
             }
         }
 
-        for (k, v) in el.attrs.iter() {
-            if (k.local == local_name!("id") && v.starts_with("mw"))
-                || k.local.starts_with("data-mw")
-                || ["prefix", "typeof", "about", "rel"]
+        for (k, _v) in el.attrs.iter() {
+            if k.local.starts_with("data-mw")
+                // TODO: To keep ids for linking to headers, only remove ones that start with "mw".
+                || ["id", "prefix", "typeof", "about", "rel"]
                     .iter()
-                    .any(|id| *id == &k.local)
+                    .any(|attr| *attr == &k.local)
             {
                 to_remove.push(k.to_owned());
             }
