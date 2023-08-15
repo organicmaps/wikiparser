@@ -123,6 +123,8 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
     }
     remove_ids(document, to_remove.drain(..));
 
+    remove_comments(document);
+
     remove_links(document);
 
     remove_attrs(document);
@@ -134,6 +136,16 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
             node.detach();
         }
     }
+}
+
+fn remove_comments(document: &mut Html) {
+    let mut to_remove = Vec::new();
+    for el in document.root_element().descendants() {
+        if el.value().is_comment() {
+            to_remove.push(el.id());
+        }
+    }
+    remove_ids(document, to_remove.drain(..));
 }
 
 fn remove_attrs(document: &mut Html) {
