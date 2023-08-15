@@ -65,6 +65,8 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
             "video",
             "figure",
             "embed",
+            // Pronunciation "listen" link/button.
+            r#"span[typeof="mw:Transclusion"][data-mw*="\"audio\":"]"#,
         ]
         .join(", "),
     )
