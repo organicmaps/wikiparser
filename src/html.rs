@@ -125,6 +125,8 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
     }
     remove_ids(document, to_remove.drain(..));
 
+    remove_empty_sections(document);
+
     remove_comments(document);
 
     expand_links(document);
@@ -150,6 +152,39 @@ fn remove_comments(document: &mut Html) {
         }
     }
     remove_ids(document, to_remove.drain(..));
+}
+
+fn remove_empty_sections(document: &mut Html) {
+    let mut to_remove = Vec::new();
+    for el in document.select(&HEADERS) {
+        // TODO: does select match on detached nodes?
+        let Some(parent) = el.parent() else { continue; };
+
+        if !parent
+            .value()
+            .as_element()
+            .map(|p| p.name() == "section")
+            .unwrap_or_default()
+        {
+            trace!("Skipping header without section name: {:?}", parent);
+            continue;
+        }
+
+        if el
+            .next_siblings()
+            .filter_map(ElementRef::wrap)
+            .all(|e| is_empty_or_whitespace(&e) || HEADERS.matches(&e))
+        {
+            trace!(
+                "Removing empty section {} {:?}",
+                el.value().name(),
+                el.text().collect::<String>()
+            );
+            to_remove.push(parent.id());
+        }
+    }
+
+    remove_ids(document, to_remove);
 }
 
 fn remove_attrs(document: &mut Html) {
