@@ -5,6 +5,9 @@ use once_cell::sync::Lazy;
 use scraper::{ElementRef, Html, Selector};
 use serde::Deserialize;
 
+mod pretty;
+pub use pretty::pretty_print;
+
 #[derive(Debug, Deserialize)]
 struct Config<'a> {
     #[serde(borrow)]
@@ -37,7 +40,11 @@ static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
 
 pub fn simplify(html: &str, lang: &str) -> String {
     let mut document = Html::parse_document(html);
+    simplify_html(&mut document, lang);
+    document.html()
+}
 
+pub fn simplify_html(document: &mut Html, lang: &str) {
     let mut to_remove = Vec::new();
 
     // Remove configured sections and all trailing elements until next section.
@@ -67,7 +74,7 @@ pub fn simplify(html: &str, lang: &str) -> String {
             }
         }
 
-        remove_ids(&mut document, to_remove.drain(..));
+        remove_ids(document, to_remove.drain(..));
     }
 
     for el in document
@@ -79,11 +86,9 @@ pub fn simplify(html: &str, lang: &str) -> String {
             to_remove.push(el.id());
         }
     }
-    remove_ids(&mut document, to_remove.drain(..));
+    remove_ids(document, to_remove.drain(..));
 
-    remove_links(&mut document);
-
-    document.html()
+    remove_links(document);
 }
 
 fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
