@@ -71,6 +71,8 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
             "embed",
             // Pronunciation "listen" link/button.
             r#"span[typeof="mw:Transclusion"][data-mw*="\"audio\":"]"#,
+            // Coordinates transclusion.
+            "span#coordinates",
         ]
         .join(", "),
     )
@@ -121,15 +123,15 @@ pub fn simplify_html(document: &mut Html, lang: &str) {
         .descendants()
         .filter_map(ElementRef::wrap)
     {
-        if (ELEMENT_DENY_LIST.matches(&el) || is_empty_or_whitespace(&el))
-            && !ELEMENT_ALLOW_LIST.matches(&el)
-        {
+        if ELEMENT_DENY_LIST.matches(&el) && !ELEMENT_ALLOW_LIST.matches(&el) {
             to_remove.push(el.id());
         }
     }
     remove_ids(document, to_remove.drain(..));
 
     remove_empty_sections(document);
+
+    remove_empty(document);
 
     remove_non_element_nodes(document);
 
@@ -184,6 +186,22 @@ fn remove_toplevel_whitespace(document: &mut Html) {
         to_remove.len(),
         parent.value(),
     );
+    remove_ids(document, to_remove.drain(..));
+}
+
+fn remove_empty(document: &mut Html) {
+    let mut to_remove = Vec::new();
+
+    for el in document
+        .root_element()
+        .descendants()
+        .filter_map(ElementRef::wrap)
+    {
+        if is_empty_or_whitespace(&el) {
+            to_remove.push(el.id());
+        }
+    }
+
     remove_ids(document, to_remove.drain(..));
 }
 
