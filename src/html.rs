@@ -30,9 +30,6 @@ static HEADERS: Lazy<Selector> =
 static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
     Selector::parse(
         &[
-            // Meta tags that affect rendering.
-            "head > meta[charset]",
-            "head > meta[http-equiv]",
             // Content from other articles (expanded later)
             // TODO: See if these are used in other ways.
             "div.excerpt-block",
@@ -73,6 +70,8 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
             r#"span[typeof="mw:Transclusion"][data-mw*="\"audio\":"]"#,
             // Coordinates transclusion.
             "span#coordinates",
+            // Remove head altogether.
+            "head",
         ]
         .join(", "),
     )
@@ -86,56 +85,17 @@ pub fn simplify(html: &str, lang: &str) -> String {
 }
 
 pub fn simplify_html(document: &mut Html, lang: &str) {
-    let mut to_remove = Vec::new();
-
-    // Remove configured sections and all trailing elements until next section.
-
-    if let Some(bad_sections) = CONFIG.sections_to_remove.get(lang) {
-        for header in document.select(&HEADERS) {
-            // TODO: Should this join all text nodes?
-            let Some(title) = header.text().next() else {
-                continue
-            };
-
-            if bad_sections.contains(&title.trim()) {
-                to_remove.push(header.id());
-                let header_level = header.value().name();
-                trace!("Removing section for header {header_level} {title:?}");
-                // Strip trailing nodes.
-                for sibling in header.next_siblings() {
-                    if let Some(element) = sibling.value().as_element() {
-                        if element.name() == header_level {
-                            trace!("Stopping removal at {}", element.name(),);
-                            // TODO: Should this check for a higher level?
-                            break;
-                        }
-                    }
-                    to_remove.push(sibling.id());
-                }
-            }
-        }
-
-        remove_ids(document, to_remove.drain(..));
+    if let Some(titles) = CONFIG.sections_to_remove.get(lang) {
+        remove_sections(document, titles);
     }
 
-    for el in document
-        .root_element()
-        .descendants()
-        .filter_map(ElementRef::wrap)
-    {
-        if ELEMENT_DENY_LIST.matches(&el) && !ELEMENT_ALLOW_LIST.matches(&el) {
-            to_remove.push(el.id());
-        }
-    }
-    remove_ids(document, to_remove.drain(..));
+    remove_denylist_elements(document);
 
     remove_empty_sections(document);
 
     remove_empty(document);
 
     remove_non_element_nodes(document);
-
-    expand_links(document);
 
     remove_attrs(document);
 
@@ -150,6 +110,57 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
             node.detach();
         }
     }
+}
+
+/// Remove sections with the specified `titles` and all trailing elements until next section.
+fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
+    let mut to_remove = Vec::new();
+
+    for header in document.select(&HEADERS) {
+        let Some(parent) = header.parent() else { continue; };
+
+        if !parent
+            .value()
+            .as_element()
+            .map(|p| p.name() == "section")
+            .unwrap_or_default()
+        {
+            trace!("Skipping header without section name: {:?}", parent);
+            continue;
+        }
+
+        // TODO: Should this join all text nodes?
+        let Some(title) = header.text().next() else {
+            continue
+        };
+
+        if !titles.contains(title) {
+            continue;
+        }
+
+        trace!(
+            "Removing denylisted section {} {:?}",
+            header.value().name(),
+            header.text().collect::<String>()
+        );
+        to_remove.push(parent.id());
+    }
+
+    remove_ids(document, to_remove.drain(..));
+}
+
+fn remove_denylist_elements(document: &mut Html) {
+    let mut to_remove = Vec::new();
+    for el in document
+        .root_element()
+        .descendants()
+        .filter_map(ElementRef::wrap)
+    {
+        if ELEMENT_DENY_LIST.matches(&el) && !ELEMENT_ALLOW_LIST.matches(&el) {
+            to_remove.push(el.id());
+        }
+    }
+    remove_ids(document, to_remove.drain(..));
 }
 
 fn remove_non_element_nodes(document: &mut Html) {
@@ -208,7 +219,6 @@ fn remove_empty(document: &mut Html) {
 fn remove_empty_sections(document: &mut Html) {
     let mut to_remove = Vec::new();
     for el in document.select(&HEADERS) {
-        // TODO: does select match on detached nodes?
         let Some(parent) = el.parent() else { continue; };
 
         if !parent
@@ -271,13 +281,6 @@ fn remove_attrs(document: &mut Html) {
 }
 
 fn final_expansions(document: &mut Html) {
-    // Remove head.
-    if let Some(head) = document.select(&Selector::parse("head").unwrap()).next() {
-        if let Some(mut node) = document.tree.get_mut(head.id()) {
-            node.detach();
-        }
-    }
-
     let mut to_expand = Vec::new();
     for el in document
         .root_element()
@@ -285,7 +288,7 @@ fn final_expansions(document: &mut Html) {
         .filter_map(ElementRef::wrap)
     {
         if (el.value().name() == "span" && el.value().attrs().next().is_none())
-            || ["section", "div", "body", "html"].contains(&el.value().name())
+            || ["a", "section", "div", "body", "html"].contains(&el.value().name())
         {
             to_expand.push(el.id());
         }
@@ -300,18 +303,6 @@ fn final_expansions(document: &mut Html) {
 
 fn is_empty_or_whitespace(el: &ElementRef) -> bool {
     el.text().flat_map(str::chars).all(char::is_whitespace)
-}
-
-/// Remove all links, preserving any inner elements/text.
-fn expand_links(document: &mut Html) {
-    let links: Vec<_> = document
-        .select(&Selector::parse("a").unwrap())
-        .map(|el| el.id())
-        .collect();
-
-    for id in links {
-        expand_id(document, id)
-    }
 }
 
 /// Remove an element, leaving any children in its place.
@@ -339,6 +330,17 @@ mod test {
     #[test]
     fn static_config_parses() {
         assert!(!CONFIG.sections_to_remove.is_empty());
+    }
+
+    fn expand_links(document: &mut Html) {
+        let links: Vec<_> = document
+            .select(&Selector::parse("a").unwrap())
+            .map(|el| el.id())
+            .collect();
+
+        for id in links {
+            expand_id(document, id)
+        }
     }
 
     #[test]
@@ -375,7 +377,7 @@ mod test {
         let link = document.select(&second_link).next().unwrap().id();
         document.tree.get_mut(link).unwrap().detach();
 
-        super::expand_links(&mut document);
+        expand_links(&mut document);
 
         let links: Vec<_> = document.select(&anchors).collect();
 
