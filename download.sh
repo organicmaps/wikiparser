@@ -1,6 +1,7 @@
 #! /usr/bin/env bash
 # Download the latest Wikipedia Enterprise dumps.
 # Exit codes:
+# - 0: The lastest dumps are already present or were downloaded successfully.
 # - No new dumps available
 # - Dump not complete
 USAGE="download.sh DOWNLOAD_DIR"
@@ -20,7 +21,7 @@ SCRIPT_PATH=$(dirname "$0")
 cd "$SCRIPT_PATH"
 SCRIPT_PATH=$(pwd)
 
-# only load library after changing to script directory
+# Only load library after changing to script directory.
 source lib.sh
 
 if [ -z "${LANGUAGES:-}" ]; then
@@ -57,5 +58,5 @@ if [ -z "$URLS" ]; then
 fi
 
 log "Downloading available dumps"
-# shellcheck disable=SC2086 # URLS should be expanded on spaces
+# shellcheck disable=SC2086 # URLS should be expanded on spaces.
 wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
