@@ -34,6 +34,11 @@ fi
 DUMP_DIR=$(readlink -f "$1")
 shift
 
+if [ ! -d "$DUMP_DIR" ]; then
+    echo "DUMP_DIR '$DUMP_DIR' does not exist" >&2
+    exit 1
+fi
+
 # Ensure we're running in the directory of this script.
 SCRIPT_PATH=$(dirname "$0")
 cd "$SCRIPT_PATH"
