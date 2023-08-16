@@ -1,16 +1,32 @@
 #! /usr/bin/env bash
-# Download the latest Wikipedia Enterprise dumps.
-# Exit codes:
-# - 0: The lastest dumps are already present or were downloaded successfully.
-# - No new dumps available
-# - Dump not complete
-USAGE="download.sh DUMP_DIR"
+USAGE="Usage: ./download.sh <DUMP_DIR>
+
+Download the latest Wikipedia Enterprise HTML dumps.
+
+Arguments:
+    <DUMP_DIR>  An existing directory to store dumps in. Dumps will be grouped
+                into subdirectories by date, and a link 'latest' will point to
+                the latest complete dump subdirectory, if it exists.
+
+Environment Variables:
+    LANGUAGES   A space-separated list of wikipedia language codes to download
+                dumps of.
+                Defaults to the languages in 'article_processing_config.json'.
+                See <https://meta.wikimedia.org/wiki/List_of_Wikipedias>.
+
+Exit codes:
+    0   The lastest dumps are already present or were downloaded successfully.
+    1   Argument error.
+    16  Some of languages were not available to download. The latest dump may
+        be in progress, or some of the specified languages may not exist.
+    _   Subprocess error.
+"
 
 set -euo pipefail
 # set -x
 
 if [ -z "${1:-}" ]; then
-    echo -e "Usage:\t$USAGE\n" >&2
+    echo -n "$USAGE" >&2
     exit 1
 fi
 
@@ -60,7 +76,7 @@ done
 
 if [ -z "$URLS" ]; then
     log "No dumps available"
-    exit 1
+    exit 16
 fi
 
 # The subdir to store the latest dump in.
@@ -75,9 +91,11 @@ wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
 
 if [ $MISSING_DUMPS -gt 0 ]; then
     log "$MISSING_DUMPS dumps not available yet"
-    exit 1
+    exit 16
 fi
 
 log "Linking 'latest' to '$LATEST_DUMP'"
 LATEST_LINK="$DUMP_DIR/latest"
 ln -sf "$LATEST_DUMP" "$LATEST_LINK"
+
+# TODO: Remove old dumps?
