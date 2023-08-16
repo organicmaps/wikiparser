@@ -12,7 +12,7 @@ It defines article sections that are not important for users and should be remov
 
 ## Downloading Dumps
 
-[Enterprise HTML dumps, updated twice a month. are publicly accessible](https://dumps.wikimedia.org/other/enterprise_html/).
+[Enterprise HTML dumps, updated twice a month, are publicly accessible ](https://dumps.wikimedia.org/other/enterprise_html/).
 
 For the wikiparser you'll want the ["NS0"](https://en.wikipedia.org/wiki/Wikipedia:Namespace) "ENTERPRISE-HTML" `.json.tar.gz` files.
 
