@@ -7,7 +7,7 @@
 USAGE="download.sh DOWNLOAD_DIR"
 
 set -euo pipefail
-set -x
+# set -x
 
 if [ -z "${1:-}" ]; then
     echo -e "Usage:\t$USAGE\n" >&2
@@ -28,21 +28,22 @@ if [ -z "${LANGUAGES:-}" ]; then
     # Load languages from config.
     LANGUAGES=$(jq -r '(.sections_to_remove | keys | .[])' article_processing_config.json)
 fi
-log "Selected languages: $LANGUAGES"
+# shellcheck disable=SC2086 # LANGUAGES is intentionally expanded.
+log "Selected languages:" $LANGUAGES
 
-TMP=$(mktemp -d wikiparser-download-XXXX)
+TMP=$(mktemp --tmpdir -d wikiparser-download-XXXX)
 trap 'rm -rf $TMP' EXIT INT HUP
 
 log "Fetching run index"
 # Call wget outside of pipeline for errors to be caught by set -e.
 wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose  -O "$TMP/runs.html"
 
-LATEST_DUMP=$(grep -Po '(?<=href=")[^"]*' "$TMP/runs.html" | sort | head -n1)
-LATEST_DUMP="${LATEST_DUMP#/}"
+LATEST_DUMP=$(grep -Po '(?<=href=")[^"]*' "$TMP/runs.html" | grep -P '\d{8}' | sort -r | head -n1)
+LATEST_DUMP="${LATEST_DUMP%/}"
 
-log "Fetching index for latest dump '$LATEST_DUMP'"
-wget "https://dumps.wikimedia.org/other/enterprise_html/runs/$LATEST_DUMP" --no-verbose -O "$TMP/$LATEST_DUMP.html"
+log "Checking latest dump $LATEST_DUMP"
 
+URLS=
 MISSING_DUMPS=0
 for lang in $LANGUAGES; do
     url="https://dumps.wikimedia.org/other/enterprise_html/runs/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
