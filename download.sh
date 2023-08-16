@@ -49,15 +49,15 @@ fi
 # shellcheck disable=SC2086 # LANGUAGES is intentionally expanded.
 log "Selected languages:" $LANGUAGES
 
-TMP=$(mktemp --tmpdir -d wikiparser-download-XXXX)
-trap 'rm -rf $TMP' EXIT INT HUP
+TMP_DIR=$(mktemp --tmpdir -d wikiparser-download-XXXX)
+trap 'rm -rf $TMP_DIR' EXIT INT HUP
 
 log "Fetching run index"
 # Call wget outside of pipeline for errors to be caught by set -e.
-wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose  -O "$TMP/runs.html"
+wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose  -O "$TMP_DIR/runs.html"
 
 # The date of the latest dump, YYYYMMDD.
-LATEST_DUMP=$(grep -Po '(?<=href=")[^"]*' "$TMP/runs.html" | grep -P '\d{8}' | sort -r | head -n1)
+LATEST_DUMP=$(grep -Po '(?<=href=")[^"]*' "$TMP_DIR/runs.html" | grep -P '\d{8}' | sort -r | head -n1)
 LATEST_DUMP="${LATEST_DUMP%/}"
 
 log "Checking latest dump $LATEST_DUMP"
