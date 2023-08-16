@@ -8,7 +8,7 @@ USAGE="download.sh DOWNLOAD_DIR"
 set -euo pipefail
 set -x
 
-if [ -z "${1}" ]; then
+if [ -z "${1:-}" ]; then
     echo -e "Usage:\t$USAGE\n" >&2
     exit 1
 fi
@@ -23,7 +23,8 @@ SCRIPT_PATH=$(pwd)
 # only load library after changing to script directory
 source lib.sh
 
-if [ -z "${LANGUAGES+}" ]; then
+if [ -z "${LANGUAGES:-}" ]; then
+    # Load languages from config.
     LANGUAGES=$(jq -r '(.sections_to_remove | keys)' article_processing_config.json)
 fi
 log "Selected languages: $LANGUAGES"
