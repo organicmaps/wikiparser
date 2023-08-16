@@ -26,7 +26,7 @@ source lib.sh
 
 if [ -z "${LANGUAGES:-}" ]; then
     # Load languages from config.
-    LANGUAGES=$(jq -r '(.sections_to_remove | keys)' article_processing_config.json)
+    LANGUAGES=$(jq -r '(.sections_to_remove | keys | .[])' article_processing_config.json)
 fi
 log "Selected languages: $LANGUAGES"
 
