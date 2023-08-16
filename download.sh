@@ -44,7 +44,7 @@ log "Fetching index for latest dump '$LATEST_DUMP'"
 wget "https://dumps.wikimedia.org/other/enterprise_html/runs/$LATEST_DUMP" --no-verbose -O "$TMP/$LATEST_DUMP.html"
 
 for lang in $LANGUAGES; do
-    url="https://wikipedia.invalid/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
+    url="https://dumps.wikimedia.org/other/enterprise_html/runs/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
     if ! wget --no-verbose --method=HEAD "$url"; then
         log "Dump for '$lang' does not exist yet at '$url'"
         continue
