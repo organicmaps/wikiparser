@@ -13,7 +13,7 @@ if [ -z "${1}" ]; then
     exit 1
 fi
 
-DOWNLOAD_DIR=$1
+DOWNLOAD_DIR=$(readlink -f "$1")
 
 # Ensure we're running in the directory of this script.
 SCRIPT_PATH=$(dirname "$0")
