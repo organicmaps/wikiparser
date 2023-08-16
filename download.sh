@@ -4,7 +4,7 @@
 # - 0: The lastest dumps are already present or were downloaded successfully.
 # - No new dumps available
 # - Dump not complete
-USAGE="download.sh DOWNLOAD_DIR"
+USAGE="download.sh DUMP_DIR"
 
 set -euo pipefail
 # set -x
@@ -14,7 +14,9 @@ if [ -z "${1:-}" ]; then
     exit 1
 fi
 
-DOWNLOAD_DIR=$(readlink -f "$1")
+# The parent directory to store groups of dumps in.
+DUMP_DIR=$(readlink -f "$1")
+shift
 
 # Ensure we're running in the directory of this script.
 SCRIPT_PATH=$(dirname "$0")
@@ -38,6 +40,7 @@ log "Fetching run index"
 # Call wget outside of pipeline for errors to be caught by set -e.
 wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose  -O "$TMP/runs.html"
 
+# The date of the latest dump, YYYYMMDD.
 LATEST_DUMP=$(grep -Po '(?<=href=")[^"]*' "$TMP/runs.html" | grep -P '\d{8}' | sort -r | head -n1)
 LATEST_DUMP="${LATEST_DUMP%/}"
 
@@ -60,6 +63,12 @@ if [ -z "$URLS" ]; then
     exit 1
 fi
 
+# The subdir to store the latest dump in.
+DOWNLOAD_DIR="$DUMP_DIR/$LATEST_DUMP"
+if [ ! -e "$DOWNLOAD_DIR" ]; then
+    mkdir "$DOWNLOAD_DIR"
+fi
+
 log "Downloading available dumps"
 # shellcheck disable=SC2086 # URLS should be expanded on spaces.
 wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
@@ -68,3 +77,7 @@ if [ $MISSING_DUMPS -gt 0 ]; then
     log "$MISSING_DUMPS dumps not available yet"
     exit 1
 fi
+
+log "Linking 'latest' to '$LATEST_DUMP'"
+LATEST_LINK="$DUMP_DIR/latest"
+ln -sf "$LATEST_DUMP" "$LATEST_LINK"
