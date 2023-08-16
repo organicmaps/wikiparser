@@ -10,6 +10,32 @@ OpenStreetMap commonly stores these as [`wikipedia*=`](https://wiki.openstreetma
 [`article_processing_config.json`](article_processing_config.json) should be updated when adding a new language.
 It defines article sections that are not important for users and should be removed from the extracted HTML.
 
+## Downloading Dumps
+
+[Enterprise HTML dumps, updated twice a month. are publicly accessible](https://dumps.wikimedia.org/other/enterprise_html/).
+
+For the wikiparser you'll want the ["NS0"](https://en.wikipedia.org/wiki/Wikipedia:Namespace) "ENTERPRISE-HTML" `.json.tar.gz` files.
+
+They are gzipped tar files containing a single file of newline-delimited JSON matching the [Wikimedia Enterprise API schema](https://enterprise.wikimedia.com/docs/data-dictionary/).
+
+The included [`download.sh`](./download.sh) script handles downloading the latest set of dumps in specific languages.
+It maintains a directory with the following layout:
+```
+<DUMP_DIR>/
+├── latest -> 20230701/
+├── 20230701/
+│  ├── dewiki-NS0-20230701-ENTERPRISE-HTML.json.tar.gz
+│  ├── enwiki-NS0-20230701-ENTERPRISE-HTML.json.tar.gz
+│  ├── eswiki-NS0-20230701-ENTERPRISE-HTML.json.tar.gz
+│  ...
+├── 20230620/
+│  ├── dewiki-NS0-20230620-ENTERPRISE-HTML.json.tar.gz
+│  ├── enwiki-NS0-20230620-ENTERPRISE-HTML.json.tar.gz
+│  ├── eswiki-NS0-20230620-ENTERPRISE-HTML.json.tar.gz
+│  ...
+...
+```
+
 ## Usage
 
 To use with the map generator, see the [`run.sh` script](run.sh) and its own help documentation.
