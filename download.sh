@@ -43,10 +43,12 @@ LATEST_DUMP="${LATEST_DUMP#/}"
 log "Fetching index for latest dump '$LATEST_DUMP'"
 wget "https://dumps.wikimedia.org/other/enterprise_html/runs/$LATEST_DUMP" --no-verbose -O "$TMP/$LATEST_DUMP.html"
 
+MISSING_DUMPS=0
 for lang in $LANGUAGES; do
     url="https://dumps.wikimedia.org/other/enterprise_html/runs/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
     if ! wget --no-verbose --method=HEAD "$url"; then
-        log "Dump for '$lang' does not exist yet at '$url'"
+        MISSING_DUMPS=$(( MISSING_DUMPS + 1 ))
+        log "Dump for '$lang' does not exist at '$url'"
         continue
     fi
     URLS="$URLS $url"
@@ -60,3 +62,8 @@ fi
 log "Downloading available dumps"
 # shellcheck disable=SC2086 # URLS should be expanded on spaces.
 wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+
+if [ $MISSING_DUMPS -gt 0 ]; then
+    log "$MISSING_DUMPS dumps not available yet"
+    exit 1
+fi
