@@ -55,8 +55,6 @@ fi
 log "Selected languages:" $LANGUAGES
 
 log "Fetching run index"
-
-
 # The date of the latest dump, YYYYMMDD.
 LATEST_DUMP=$(wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose -O - \
             | grep -Po '(?<=href=")[^"]*' | grep -P '\d{8}' | sort -r | head -n1)
