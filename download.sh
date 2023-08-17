@@ -9,8 +9,8 @@ Arguments:
                 the latest complete dump subdirectory, if it exists.
 
 Environment Variables:
-    LANGUAGES   A space-separated list of wikipedia language codes to download
-                dumps of.
+    LANGUAGES   A whitespace-separated list of wikipedia language codes to
+                download dumps of.
                 Defaults to the languages in 'article_processing_config.json'.
                 See <https://meta.wikimedia.org/wiki/List_of_Wikipedias>.
 
