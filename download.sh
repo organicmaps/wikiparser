@@ -34,7 +34,7 @@ DELETE_OLD_DUMPS=false
 while getopts "hD" opt
 do
     case $opt in
-    h)  echo -n "$USAGE" >&2; exit 0;;
+    h)  echo -n "$USAGE"; exit 0;;
     D)  DELETE_OLD_DUMPS=true;;
     ?)  echo "$USAGE" | head -n1 >&2; exit 1;;
     esac
