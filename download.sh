@@ -109,8 +109,17 @@ if [ ! -e "$DOWNLOAD_DIR" ]; then
 fi
 
 log "Downloading available dumps"
-# shellcheck disable=SC2086 # URLS should be expanded on spaces.
-wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+if type wget2 > /dev/null; then
+    # NOTE: Wikipedia requests no more than 2 concurrent downloads.
+    # See https://dumps.wikimedia.org/ for more info.
+
+    # shellcheck disable=SC2086 # URLS should be expanded on spaces.
+    wget2 --max-threads 2 --verbose --progress=bar --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+else
+    log "WARN: wget2 is not available, falling back to sequential downloads"
+    # shellcheck disable=SC2086 # URLS should be expanded on spaces.
+    wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+fi
 
 if [ $MISSING_DUMPS -gt 0 ]; then
     log "$MISSING_DUMPS dumps not available yet"
