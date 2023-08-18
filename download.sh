@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-USAGE="Usage: ./download.sh <DUMP_DIR>
+USAGE="Usage: ./download.sh [-hD] <DUMP_DIR>
 
 Download the latest Wikipedia Enterprise HTML dumps.
 
@@ -7,6 +7,10 @@ Arguments:
     <DUMP_DIR>  An existing directory to store dumps in. Dumps will be grouped
                 into subdirectories by date, and a link 'latest' will point to
                 the latest complete dump subdirectory, if it exists.
+
+Options:
+    -h      Print this help screen
+    -D      Delete all old dump subdirectories if the latest is downloaded
 
 Environment Variables:
     LANGUAGES   A whitespace-separated list of wikipedia language codes to
@@ -25,7 +29,20 @@ Exit codes:
 set -euo pipefail
 # set -x
 
+# Parse options.
+DELETE_OLD_DUMPS=false
+while getopts "hD" opt
+do
+    case $opt in
+    h)  echo -n "$USAGE" >&2; exit 0;;
+    D)  DELETE_OLD_DUMPS=true;;
+    ?)  echo "$USAGE" | head -n1 >&2; exit 1;;
+    esac
+done
+shift $((OPTIND - 1))
+
 if [ -z "${1:-}" ]; then
+    echo "DUMP_DIR is required" >&2
     echo -n "$USAGE" >&2
     exit 1
 fi
@@ -33,6 +50,12 @@ fi
 # The parent directory to store groups of dumps in.
 DUMP_DIR=$(readlink -f "$1")
 shift
+
+if [ -n "${1:-}" ]; then
+    echo "Unexpected extra argument: '$1'" >&2
+    echo "$USAGE" | head -n1 >&2
+    exit 1
+fi
 
 if [ ! -d "$DUMP_DIR" ]; then
     echo "DUMP_DIR '$DUMP_DIR' does not exist" >&2
@@ -98,4 +121,15 @@ log "Linking 'latest' to '$LATEST_DUMP'"
 LATEST_LINK="$DUMP_DIR/latest"
 ln -sf "$LATEST_DUMP" "$LATEST_LINK"
 
-# TODO: Remove old dumps?
+if [ "$DELETE_OLD_DUMPS" = true ]; then
+    # shellcheck disable=SC2010 # Only matching files with numeric names are used.
+    mapfile -t OLD_DUMPS < <(ls "$DUMP_DIR" | grep -P '^\d{8}$' | grep -vF "$LATEST_DUMP")
+    if [ "${#OLD_DUMPS[@]}" -gt 0 ]; then
+        log "Deleting old dumps" "${OLD_DUMPS[@]}"
+        for old_dump in "${OLD_DUMPS[@]}"; do
+            rm -r "${DUMP_DIR:?}/${old_dump:?}/"
+        done
+    else
+        log "No old dumps to delete"
+    fi
+fi
