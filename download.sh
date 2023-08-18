@@ -128,7 +128,7 @@ fi
 
 log "Linking 'latest' to '$LATEST_DUMP'"
 LATEST_LINK="$DUMP_DIR/latest"
-ln -sf "$LATEST_DUMP" "$LATEST_LINK"
+ln -sf -T "$LATEST_DUMP" "$LATEST_LINK"
 
 if [ "$DELETE_OLD_DUMPS" = true ]; then
     # shellcheck disable=SC2010 # Only matching files with numeric names are used.
