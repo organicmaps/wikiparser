@@ -11,9 +11,8 @@ Arguments:
 Options:
     -h          Print this help screen
     -D          Delete all old dump subdirectories if the latest is downloaded
-    -c <NUM>    Number of concurrent downloads to allow. Requires MIRROR to be
-                set (Wikimedia servers ask for no more than 2). Requires wget2.
-                Defaults to 2.
+    -c <NUM>    Number of concurrent downloads to allow. Ignored if wget2 is not
+                present or MIRROR is not set. Defaults to 2.
 
 Environment Variables:
     LANGUAGES   A whitespace-separated list of wikipedia language codes to
