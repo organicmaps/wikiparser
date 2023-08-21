@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-USAGE="Usage: ./download.sh [-hD] <DUMP_DIR>
+USAGE="Usage: ./download.sh [-hD] [-c <NUM>] <DUMP_DIR>
 
 Download the latest Wikipedia Enterprise HTML dumps.
 
@@ -9,8 +9,11 @@ Arguments:
                 the latest complete dump subdirectory, if it exists.
 
 Options:
-    -h      Print this help screen
-    -D      Delete all old dump subdirectories if the latest is downloaded
+    -h          Print this help screen
+    -D          Delete all old dump subdirectories if the latest is downloaded
+    -c <NUM>    Number of concurrent downloads to allow. Requires MIRROR to be
+                set (Wikimedia servers ask for no more than 2). Requires wget2.
+                Defaults to 2.
 
 Environment Variables:
     LANGUAGES   A whitespace-separated list of wikipedia language codes to
@@ -37,11 +40,13 @@ set -euo pipefail
 
 # Parse options.
 DELETE_OLD_DUMPS=false
-while getopts "hD" opt
+CONCURRENT_DOWNLOADS=
+while getopts "hDc:" opt
 do
     case $opt in
     h)  echo -n "$USAGE"; exit 0;;
     D)  DELETE_OLD_DUMPS=true;;
+    c)  CONCURRENT_DOWNLOADS=$OPTARG;;
     ?)  echo "$USAGE" | head -n1 >&2; exit 1;;
     esac
 done
@@ -66,6 +71,18 @@ fi
 if [ ! -d "$DUMP_DIR" ]; then
     echo "DUMP_DIR '$DUMP_DIR' does not exist" >&2
     exit 1
+fi
+
+if [ -n "$CONCURRENT_DOWNLOADS" ]; then
+    if [ ! "$CONCURRENT_DOWNLOADS" -ge 1 ]; then
+        echo "Number of concurrent downloads (-n) must be >= 1" >&2
+        echo "$USAGE" | head -n1 >&2
+        exit 1
+    fi
+    if [ -z "${MIRROR:-}" ]; then
+        echo "WARN: MIRROR is not set; ignoring -n" >&2
+        CONCURRENT_DOWNLOADS=
+    fi
 fi
 
 # Ensure we're running in the directory of this script.
@@ -127,7 +144,7 @@ if type wget2 > /dev/null; then
     # See https://dumps.wikimedia.org/ for more info.
 
     # shellcheck disable=SC2086 # URLS should be expanded on spaces.
-    wget2 --max-threads 2 --verbose --progress=bar --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+    wget2 --max-threads "${CONCURRENT_DOWNLOADS:-2}" --verbose --progress=bar --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
 else
     log "WARN: wget2 is not available, falling back to sequential downloads"
     # shellcheck disable=SC2086 # URLS should be expanded on spaces.
