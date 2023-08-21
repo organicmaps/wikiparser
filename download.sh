@@ -17,12 +17,18 @@ Environment Variables:
                 download dumps of.
                 Defaults to the languages in 'article_processing_config.json'.
                 See <https://meta.wikimedia.org/wiki/List_of_Wikipedias>.
+    MIRROR      A wikimedia dump mirror to use instead of the main wikimedia
+                server. See <https://dumps.wikimedia.org/mirrors.html> for a
+                list of available mirrors, note that many do not include the
+                required Enterprise HTML dumps.
+                For example: MIRROR=https://mirror.accum.se/mirror/wikimedia.org
 
 Exit codes:
     0   The lastest dumps are already present or were downloaded successfully.
     1   Argument error.
     16  Some of languages were not available to download. The latest dump may
-        be in progress, or some of the specified languages may not exist.
+        be in progress, some of the specified languages may not exist, or the
+        chosen mirror may not host the files.
     _   Subprocess error.
 "
 
@@ -70,6 +76,13 @@ SCRIPT_PATH=$(pwd)
 # Only load library after changing to script directory.
 source lib.sh
 
+if [ -n "${MIRROR:-}" ]; then
+    log "Using mirror '$MIRROR'"
+    BASE_URL=$MIRROR
+else
+    BASE_URL="https://dumps.wikimedia.org"
+fi
+
 if [ -z "${LANGUAGES:-}" ]; then
     # Load languages from config.
     LANGUAGES=$(jq -r '(.sections_to_remove | keys | .[])' article_processing_config.json)
@@ -79,7 +92,7 @@ log "Selected languages:" $LANGUAGES
 
 log "Fetching run index"
 # The date of the latest dump, YYYYMMDD.
-LATEST_DUMP=$(wget 'https://dumps.wikimedia.org/other/enterprise_html/runs/' --no-verbose -O - \
+LATEST_DUMP=$(wget "$BASE_URL/other/enterprise_html/runs/" --no-verbose -O - \
             | grep -Po '(?<=href=")[^"]*' | grep -P '\d{8}' | sort -r | head -n1)
 LATEST_DUMP="${LATEST_DUMP%/}"
 
@@ -88,7 +101,7 @@ log "Checking latest dump $LATEST_DUMP"
 URLS=
 MISSING_DUMPS=0
 for lang in $LANGUAGES; do
-    url="https://dumps.wikimedia.org/other/enterprise_html/runs/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
+    url="$BASE_URL/other/enterprise_html/runs/${LATEST_DUMP}/${lang}wiki-NS0-${LATEST_DUMP}-ENTERPRISE-HTML.json.tar.gz"
     if ! wget --no-verbose --method=HEAD "$url"; then
         MISSING_DUMPS=$(( MISSING_DUMPS + 1 ))
         log "Dump for '$lang' does not exist at '$url'"

@@ -12,7 +12,17 @@ It defines article sections that are not important for users and should be remov
 
 ## Downloading Dumps
 
-[Enterprise HTML dumps, updated twice a month, are publicly accessible](https://dumps.wikimedia.org/other/enterprise_html/).
+[Enterprise HTML dumps, updated twice a month, are publicly accessible](https://dumps.wikimedia.org/other/enterprise_html/). Please note that each language's dump is tens of gigabytes in size.
+
+Wikimedia requests no more than 2 concurrent downloads, which the included [`download.sh`](./download.sh) script respects:
+> If you are reading this on Wikimedia servers, please note that we have rate limited downloaders and we are capping the number of per-ip connections to 2.
+> This will help to ensure that everyone can access the files with reasonable download times.
+> Clients that try to evade these limits may be blocked.
+> Our mirror sites do not have this cap.
+
+See [the list of available mirrors](https://dumps.wikimedia.org/mirrors.html) for other options. Note that most of them do not include the enterprise dumps; check to see that the `other/enterprise_html/runs/` path includes subdirectories with files. The following two mirrors are known to include the enterprise html dumps as of August 2023:
+- (US) https://dumps.wikimedia.your.org
+- (Sweden) https://mirror.accum.se/mirror/wikimedia.org
 
 For the wikiparser you'll want the ["NS0"](https://en.wikipedia.org/wiki/Wikipedia:Namespace) "ENTERPRISE-HTML" `.json.tar.gz` files.
 
