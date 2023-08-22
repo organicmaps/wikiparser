@@ -37,6 +37,17 @@ Exit codes:
 set -euo pipefail
 # set -x
 
+build_user_agent() {
+    # While the dump websites are not part of the API, it's still polite to identify yourself.
+    # See https://meta.wikimedia.org/wiki/User-Agent_policy
+    subcommand=$1
+    name="OrganicMapsWikiparserDownloaderBot"
+    version="1.0"
+    url="https://github.com/organicmaps/wikiparser"
+    email="hello@organicmaps.app"
+    echo -n "$name/$version ($url; $email) $subcommand"
+}
+
 # Parse options.
 DELETE_OLD_DUMPS=false
 CONCURRENT_DOWNLOADS=
@@ -79,6 +90,8 @@ if [ -n "$CONCURRENT_DOWNLOADS" ]; then
         exit 1
     fi
     if [ -z "${MIRROR:-}" ]; then
+        # NOTE: Wikipedia requests no more than 2 concurrent downloads.
+        # See https://dumps.wikimedia.org/ for more info.
         echo "WARN: MIRROR is not set; ignoring -n" >&2
         CONCURRENT_DOWNLOADS=
     fi
@@ -91,6 +104,7 @@ SCRIPT_PATH=$(pwd)
 
 # Only load library after changing to script directory.
 source lib.sh
+
 
 if [ -n "${MIRROR:-}" ]; then
     log "Using mirror '$MIRROR'"
@@ -139,15 +153,19 @@ fi
 
 log "Downloading available dumps"
 if type wget2 > /dev/null; then
-    # NOTE: Wikipedia requests no more than 2 concurrent downloads.
-    # See https://dumps.wikimedia.org/ for more info.
-
     # shellcheck disable=SC2086 # URLS should be expanded on spaces.
-    wget2 --max-threads "${CONCURRENT_DOWNLOADS:-2}" --verbose --progress=bar --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+    wget2 --verbose --progress=bar --continue \
+        --user-agent "$(build_user_agent wget2)" \
+        --max-threads "${CONCURRENT_DOWNLOADS:-2}" \
+        --directory-prefix "$DOWNLOAD_DIR" \
+        $URLS
 else
     log "WARN: wget2 is not available, falling back to sequential downloads"
     # shellcheck disable=SC2086 # URLS should be expanded on spaces.
-    wget --directory-prefix "$DOWNLOAD_DIR" --continue $URLS
+    wget --continue \
+        --user-agent "$(build_user_agent wget)" \
+        --directory-prefix "$DOWNLOAD_DIR" \
+        $URLS
 fi
 
 if [ $MISSING_DUMPS -gt 0 ]; then
