@@ -72,10 +72,12 @@ pub fn parse_osm_tag_file(
 
     let mut qid_col = None;
     let mut title_col = None;
+    let mut osm_id_col = None;
     for (column, title) in rdr.headers()?.iter().enumerate() {
         match title {
             "wikidata" => qid_col = Some(column),
             "wikipedia" => title_col = Some(column),
+            "@id" => osm_id_col = Some(column),
             _ => (),
         }
     }
@@ -97,11 +99,14 @@ pub fn parse_osm_tag_file(
                 push_error(ParseLineError {
                     text: String::new(),
                     line: rdr.position().line(),
+                    osm_id: None,
                     kind: e.into(),
                 });
                 continue;
             }
         }
+
+        let osm_id = osm_id_col.and_then(|i| row[i].parse().ok());
 
         let qid = &row[qid_col].trim();
         if !qid.is_empty() {
@@ -112,6 +117,7 @@ pub fn parse_osm_tag_file(
                 Err(e) => push_error(ParseLineError {
                     text: qid.to_string(),
                     line: rdr.position().line(),
+                    osm_id,
                     kind: e.into(),
                 }),
             }
@@ -126,6 +132,7 @@ pub fn parse_osm_tag_file(
                 Err(e) => push_error(ParseLineError {
                     text: title.to_string(),
                     line: rdr.position().line(),
+                    osm_id,
                     kind: e.into(),
                 }),
             }
@@ -137,25 +144,31 @@ pub fn parse_osm_tag_file(
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseErrorKind {
-    #[error("bad title")]
+    #[error("title")]
     Title(#[from] ParseTitleError),
-    #[error("bad QID")]
+    #[error("QID")]
     Qid(#[from] ParseQidError),
-    #[error("bad TSV line")]
+    #[error("TSV line")]
     Tsv(#[from] csv::Error),
 }
 
 #[derive(Debug)]
 pub struct ParseLineError {
-    text: String,
-    line: u64,
-    kind: ParseErrorKind,
+    pub text: String,
+    pub line: u64,
+    pub osm_id: Option<usize>,
+    pub kind: ParseErrorKind,
 }
 
 impl Display for ParseLineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // write source chain to ensure they are logged
-        write!(f, "on line {}: {:?}: {}", self.line, self.text, self.kind)?;
+        write!(f, "on line {}", self.line)?;
+        if let Some(osm_id) = self.osm_id {
+            write!(f, " ({osm_id})")?;
+        }
+        write!(f, ": {} {:?}", self.kind, self.text)?;
+
+        // Write source error chain to ensure they are logged.
         let mut source = self.kind.source();
         while let Some(e) = source {
             write!(f, ": {}", e)?;
@@ -167,7 +180,7 @@ impl Display for ParseLineError {
 
 impl Error for ParseLineError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        // return nothing b/c Display prints source chain
+        // Return nothing because Display prints source chain.
         None
     }
 }

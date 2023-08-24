@@ -100,6 +100,9 @@ cd "$BUILD_DIR"
 log "Extracting tags from '$OSM_FILE'"
 "$wikiparser" get-tags "$OSM_FILE" > osm_tags.tsv
 
+log "Writing tag parse errors to $BUILD_DIR/osm_tags_errors.tsv"
+"$wikiparser" check-tags osm_tags.tsv > osm_tags_errors.tsv
+
 # Enable backtraces in errors and panics.
 # NOTE: Backtraces are still printed for panics that are caught higher in the stack.
 # export RUST_BACKTRACE=1

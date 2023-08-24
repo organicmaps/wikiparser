@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     env,
     fs::File,
     io::{stdin, stdout, BufReader, Read, Write},
@@ -17,7 +18,7 @@ extern crate log;
 mod get_articles;
 mod get_tags;
 
-/// Extract articles from Wikipedia Enterprise HTML dumps.
+/// A set of tools to extract articles from Wikipedia Enterprise HTML dumps selected by OpenStreetMap tags.
 #[derive(Parser)]
 #[command(author, version, about, long_about, version = crate::version())]
 struct Args {
@@ -27,11 +28,10 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Cmd {
-    GetArticles(get_articles::Args),
-
     /// Extract wikidata/wikipedia tags from an OpenStreetMap PBF dump.
     ///
     /// Writes to stdout the extracted tags in a TSV format similar to `osmconvert --csv`.
+    /// Unlike `osmconvert`, this **does not** truncate long tag values and create invalid UTF-8.
     GetTags {
         /// The `.osm.pbf` file to use.
         pbf_file: PathBuf,
@@ -46,8 +46,23 @@ enum Cmd {
         threads: Option<isize>,
     },
 
-    /// Apply the same html article simplification used when extracting articles to stdin, and write it to stdout.
+    /// Attempt to parse extracted OSM tags and write errors to stdout in TSV format.
+    CheckTags {
+        /// Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
+        ///
+        /// This can be generated with the `get-tags` command or `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
+        #[arg(value_name = "FILE.tsv")]
+        osm_tags: PathBuf,
+    },
+
+    /// Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
     ///
+    /// Expects an uncompressed dump (newline-delimited JSON) connected to stdin.
+    GetArticles(get_articles::Args),
+
+    /// Apply html simplification to a single article.
+    ///
+    /// Reads from stdin and writes the simplified version to stdout.
     /// This is meant for testing and debugging.
     Simplify {
         /// The language to use when processing the article (defaults to `en`).
@@ -96,6 +111,42 @@ fn main() -> anyhow::Result<()> {
                 .context("initializing thread pool")?;
             let pbf_file = File::open(pbf_file).map(BufReader::new)?;
             get_tags::run(pbf_file)
+        }
+        Cmd::CheckTags { osm_tags } => {
+            let mut qids = HashSet::new();
+            let mut titles = HashSet::new();
+            let mut errors = Vec::new();
+            info!("Reading osm tag file");
+            om_wikiparser::wm::parse_osm_tag_file(
+                osm_tags,
+                &mut qids,
+                &mut titles,
+                Some(&mut errors),
+            )?;
+            info!("Found {} errors in tag file", errors.len());
+
+            let mut writer = csv::WriterBuilder::new()
+                .delimiter(b'\t')
+                .from_writer(stdout().lock());
+            writer.write_record(["line", "kind", "osm_id", "error", "value"])?;
+            for error in errors {
+                use om_wikiparser::wm::ParseErrorKind::*;
+                let kind = error.kind.to_string();
+                let id = error
+                    .osm_id
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default();
+                let e: anyhow::Error = match error.kind {
+                    Title(e) => e.into(),
+                    Qid(e) => e.into(),
+                    Tsv(e) => e.into(),
+                };
+                let msg = e.to_string();
+                writer.write_record([&error.line.to_string(), &kind, &id, &msg, &error.text])?;
+            }
+
+            Ok(())
         }
         Cmd::Simplify { lang } => {
             let mut input = String::new();

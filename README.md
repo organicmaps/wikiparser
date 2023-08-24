@@ -65,25 +65,30 @@ Run the program with the `--help` flag to see all supported arguments.
 
 ```
 $ cargo run --release -- --help
-Extract articles from Wikipedia Enterprise HTML dumps
+A set of tools to extract articles from Wikipedia Enterprise HTML dumps selected by OpenStreetMap tags.
 
 Usage: om-wikiparser <COMMAND>
 
 Commands:
-  get-articles  Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps
   get-tags      Extract wikidata/wikipedia tags from an OpenStreetMap PBF dump
-  simplify      Apply the same html article simplification used when extracting articles to stdin, and write it to stdout
+  check-tags    Attempt to parse extracted OSM tags and write errors to stdout in TSV format
+  get-articles  Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps
+  simplify      Apply html simplification to a single article
   help          Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help (see more with '--help')
-  -V, --version  Print version
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 Each command has its own additional help:
 
 ```
 $ cargo run -- get-articles --help
+
 Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
 
 Expects an uncompressed dump (newline-delimited JSON) connected to stdin.
@@ -99,6 +104,9 @@ Options:
           Append to the provided file path the QIDs of articles matched by title but not QID.
 
           Use this to save the QIDs of articles you know the url of, but not the QID. The same path can later be passed to the `--wikidata-qids` option to extract them from another language's dump. Writes are atomicly appended to the file, so the same path may be used by multiple concurrent instances.
+
+      --no-simplify
+          Don't process extracted HTML; write the original text to disk
 
   -h, --help
           Print help (see a summary with '-h')

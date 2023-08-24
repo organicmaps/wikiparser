@@ -48,7 +48,12 @@ impl Title {
 
     // https://en.wikipedia.org/wiki/Article_Title/More_Title
     pub fn from_url(url: &str) -> Result<Self, ParseTitleError> {
-        let url = Url::parse(url.trim())?;
+        let url = url.trim();
+        if url.is_empty() {
+            return Err(ParseTitleError::Empty);
+        }
+
+        let url = Url::parse(url)?;
 
         let (subdomain, host) = url
             .host_str()
@@ -79,10 +84,11 @@ impl Title {
 
     // en:Article Title
     pub fn from_osm_tag(tag: &str) -> Result<Self, ParseTitleError> {
-        let (lang, title) = tag
-            .trim()
-            .split_once(':')
-            .ok_or(ParseTitleError::MissingColon)?;
+        let tag = tag.trim();
+        if tag.is_empty() {
+            return Err(ParseTitleError::Empty);
+        }
+        let (lang, title) = tag.split_once(':').ok_or(ParseTitleError::MissingColon)?;
 
         let lang = lang.trim_start();
         let title = title.trim_start();
@@ -125,9 +131,11 @@ impl Title {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ParseTitleError {
-    #[error("title cannot be empty or whitespace")]
+    #[error("value is empty or whitespace")]
+    Empty,
+    #[error("title is empty or whitespace")]
     NoTitle,
-    #[error("lang cannot be empty or whitespace")]
+    #[error("lang is empty or whitespace")]
     NoLang,
     #[error("no ':' separating lang and title")]
     MissingColon,
@@ -141,7 +149,7 @@ pub enum ParseTitleError {
     NoHost,
     #[error("no subdomain in url")]
     NoSubdomain,
-    #[error("url base domain is wikipedia.org")]
+    #[error("url base domain is not wikipedia.org")]
     BadDomain,
     #[error("url base path is not /wiki/")]
     BadPath,
