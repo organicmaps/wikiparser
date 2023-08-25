@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{env, process::Command};
 
 /// Pass git-describe through CARGO_GIT_VERSION env variable
 ///
@@ -28,5 +28,11 @@ fn set_version_from_git() {
 }
 
 fn main() {
-    set_version_from_git();
+    // Only embed on release builds.
+    if env::var("PROFILE")
+        .map(|p| p == "release")
+        .unwrap_or_default()
+    {
+        set_version_from_git();
+    }
 }
