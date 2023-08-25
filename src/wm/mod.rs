@@ -10,6 +10,8 @@ pub use title::*;
 mod qid;
 pub use qid::*;
 
+use crate::osm;
+
 /// Read from a file of urls on each line.
 pub fn parse_wikidata_file(path: impl AsRef<OsStr>) -> anyhow::Result<HashSet<Qid>> {
     let contents = fs::read_to_string(path.as_ref())?;
@@ -73,11 +75,17 @@ pub fn parse_osm_tag_file(
     let mut qid_col = None;
     let mut title_col = None;
     let mut osm_id_col = None;
+    let mut osm_otype_col = None;
+    let mut osm_oname_col = None;
+    let mut osm_version_col = None;
     for (column, title) in rdr.headers()?.iter().enumerate() {
         match title {
             "wikidata" => qid_col = Some(column),
             "wikipedia" => title_col = Some(column),
             "@id" => osm_id_col = Some(column),
+            "@otype" => osm_otype_col = Some(column),
+            "@oname" => osm_oname_col = Some(column),
+            "@version" => osm_version_col = Some(column),
             _ => (),
         }
     }
@@ -97,16 +105,28 @@ pub fn parse_osm_tag_file(
                     bail!(e)
                 }
                 push_error(ParseLineError {
+                    kind: e.into(),
                     text: String::new(),
                     line: rdr.position().line(),
                     osm_id: None,
-                    kind: e.into(),
+                    osm_type: None,
+                    osm_version: None,
                 });
                 continue;
             }
         }
 
-        let osm_id = osm_id_col.and_then(|i| row[i].parse().ok());
+        let parse_metadata = || {
+            (
+                osm_id_col.and_then(|i| row[i].trim().parse::<osm::Id>().ok()),
+                // Prefer otype, use oname if not available
+                osm_otype_col
+                    .and_then(|i| row[i].trim().parse().ok())
+                    .and_then(osm::Kind::from_otype)
+                    .or_else(|| osm_oname_col.and_then(|i| osm::Kind::from_oname(&row[i]))),
+                osm_version_col.and_then(|i| row[i].trim().parse::<osm::Version>().ok()),
+            )
+        };
 
         let qid = &row[qid_col].trim();
         if !qid.is_empty() {
@@ -114,12 +134,17 @@ pub fn parse_osm_tag_file(
                 Ok(qid) => {
                     qids.insert(qid);
                 }
-                Err(e) => push_error(ParseLineError {
-                    text: qid.to_string(),
-                    line: rdr.position().line(),
-                    osm_id,
-                    kind: e.into(),
-                }),
+                Err(e) => {
+                    let (osm_id, osm_type, osm_version) = parse_metadata();
+                    push_error(ParseLineError {
+                        kind: e.into(),
+                        text: qid.to_string(),
+                        line: rdr.position().line(),
+                        osm_id,
+                        osm_type,
+                        osm_version,
+                    })
+                }
             }
         }
 
@@ -129,12 +154,17 @@ pub fn parse_osm_tag_file(
                 Ok(title) => {
                     titles.insert(title);
                 }
-                Err(e) => push_error(ParseLineError {
-                    text: title.to_string(),
-                    line: rdr.position().line(),
-                    osm_id,
-                    kind: e.into(),
-                }),
+                Err(e) => {
+                    let (osm_id, osm_type, osm_version) = parse_metadata();
+                    push_error(ParseLineError {
+                        kind: e.into(),
+                        text: title.to_string(),
+                        line: rdr.position().line(),
+                        osm_id,
+                        osm_type,
+                        osm_version,
+                    })
+                }
             }
         }
     }
@@ -154,10 +184,12 @@ pub enum ParseErrorKind {
 
 #[derive(Debug)]
 pub struct ParseLineError {
+    pub kind: ParseErrorKind,
     pub text: String,
     pub line: u64,
-    pub osm_id: Option<usize>,
-    pub kind: ParseErrorKind,
+    pub osm_id: Option<osm::Id>,
+    pub osm_type: Option<osm::Kind>,
+    pub osm_version: Option<osm::Version>,
 }
 
 impl Display for ParseLineError {

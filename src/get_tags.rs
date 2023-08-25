@@ -4,11 +4,14 @@ use std::{
     thread,
 };
 
+use om_wikiparser::osm::{Id, Kind, Version};
 use osmpbf::{BlobDecode, BlobReader, Element};
 use rayon::prelude::*;
 
 struct Record {
-    id: String,
+    id: Id,
+    kind: Kind,
+    version: Option<Version>,
     wikidata: String,
     wikipedia: String,
 }
@@ -45,33 +48,47 @@ fn write(recv: mpsc::Receiver<Record>) -> anyhow::Result<usize> {
     let mut output = csv::WriterBuilder::new()
         .delimiter(b'\t')
         .from_writer(stdout().lock());
-    output.write_record(["@id", "wikidata", "wikipedia"])?;
+    output.write_record(["@id", "@otype", "@version", "wikidata", "wikipedia"])?;
 
     let mut count = 0;
 
     for Record {
         id,
+        kind,
+        version,
         wikidata,
         wikipedia,
     } in recv
     {
-        output.write_record([id, wikidata, wikipedia])?;
+        output.write_record([
+            id.to_string(),
+            kind.otype().to_string(),
+            version.map(|v| v.to_string()).unwrap_or_default(),
+            wikidata,
+            wikipedia,
+        ])?;
         count += 1;
     }
 
     Ok(count)
 }
 
+#[rustfmt::skip]
 fn extract_tags(el: Element) -> Option<Record> {
     match el {
-        Element::Node(n) => make_record(n.id(), n.tags()),
-        Element::DenseNode(n) => make_record(n.id(), n.tags()),
-        Element::Way(w) => make_record(w.id(), w.tags()),
-        Element::Relation(r) => make_record(r.id(), r.tags()),
+        Element::Node(n) =>      make_record(Kind::Node,     n.id(), n.info().version(),            n.tags()),
+        Element::DenseNode(n) => make_record(Kind::Node,     n.id(), n.info().map(|i| i.version()), n.tags()),
+        Element::Way(w) =>       make_record(Kind::Way,      w.id(), w.info().version(),            w.tags()),
+        Element::Relation(r) =>  make_record(Kind::Relation, r.id(), r.info().version(),            r.tags()),
     }
 }
 
-fn make_record<'i>(id: i64, tags: impl 'i + Iterator<Item = (&'i str, &'i str)>) -> Option<Record> {
+fn make_record<'i>(
+    kind: Kind,
+    id: Id,
+    version: Option<Version>,
+    tags: impl 'i + Iterator<Item = (&'i str, &'i str)>,
+) -> Option<Record> {
     let mut wikipedia = String::new();
     let mut wikidata = String::new();
 
@@ -88,7 +105,9 @@ fn make_record<'i>(id: i64, tags: impl 'i + Iterator<Item = (&'i str, &'i str)>)
     }
 
     Some(Record {
-        id: id.to_string(),
+        id,
+        kind,
+        version,
         wikipedia,
         wikidata,
     })
