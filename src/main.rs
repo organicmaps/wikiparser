@@ -159,7 +159,7 @@ fn get_thread_count(requested: Option<isize>) -> anyhow::Result<NonZeroUsize> {
 /// - `v2.0` if a git tag
 /// - the commit hash `034ac04` if not a tag
 /// - `034ac04-dirty` if uncommited changes are present,
-/// or the crate version if not available (if installed from crates.io).
+/// or the crate version if not available (debug build or installed from crates.io).
 ///
 /// See `build.rs` file for more info.
 fn version() -> &'static str {
