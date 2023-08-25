@@ -106,15 +106,25 @@ impl Title {
 
     pub fn from_title(title: &str, lang: &str) -> Result<Self, ParseTitleError> {
         let title = title.trim();
-        let lang = lang.trim();
         if title.is_empty() {
             return Err(ParseTitleError::NoTitle);
         }
+        // Wikipedia titles must be less than 256 bytes of UTF-8.
+        // See: https://en.wikipedia.org/wiki/Wikipedia:Naming_conventions_(technical_restrictions)#Title_length
+        if !title.len() < 256 {
+            return Err(ParseTitleError::TitleLong);
+        }
+
+        let lang = lang.trim();
         if lang.is_empty() {
             return Err(ParseTitleError::NoLang);
         }
+        if lang.contains(|c: char| !(c.is_ascii_alphabetic() || c == '-')) {
+            return Err(ParseTitleError::LangBadChar);
+        }
+        let lang = lang.to_ascii_lowercase();
+
         let name = Self::normalize_title(title);
-        let lang = lang.to_owned();
         Ok(Self { name, lang })
     }
 
@@ -135,8 +145,12 @@ pub enum ParseTitleError {
     Empty,
     #[error("title is empty or whitespace")]
     NoTitle,
+    #[error("title is too long")]
+    TitleLong,
     #[error("lang is empty or whitespace")]
     NoLang,
+    #[error("lang contains character that is not alphabetic or '-'")]
+    LangBadChar,
     #[error("no ':' separating lang and title")]
     MissingColon,
 
