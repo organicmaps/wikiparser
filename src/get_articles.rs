@@ -9,7 +9,8 @@ use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
     html::{self, HtmlError},
-    wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, Title},
+    parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file,
+    wm::{Page, Title},
 };
 
 /// Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.

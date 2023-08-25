@@ -119,12 +119,7 @@ fn main() -> anyhow::Result<()> {
             let mut titles = HashSet::new();
             let mut errors = Vec::new();
             info!("Reading osm tag file");
-            om_wikiparser::wm::parse_osm_tag_file(
-                osm_tags,
-                &mut qids,
-                &mut titles,
-                Some(&mut errors),
-            )?;
+            om_wikiparser::parse_osm_tag_file(osm_tags, &mut qids, &mut titles, Some(&mut errors))?;
             info!("Found {} errors in tag file", errors.len());
 
             let mut writer = csv::WriterBuilder::new()
@@ -134,7 +129,7 @@ fn main() -> anyhow::Result<()> {
             writer.write_record(["line", "object", "version", "key", "error", "value"])?;
 
             for error in errors {
-                use om_wikiparser::wm::ParseErrorKind::*;
+                use om_wikiparser::ParseErrorKind::*;
                 let key = match error.kind {
                     Title(_) => "wikipedia",
                     Qid(_) => "wikidata",
