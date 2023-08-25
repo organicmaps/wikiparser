@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::Context;
 use clap::{CommandFactory, Parser, Subcommand};
+use om_wikiparser::osm;
 #[macro_use]
 extern crate log;
 
@@ -51,6 +52,7 @@ enum Cmd {
         /// Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
         ///
         /// This can be generated with the `get-tags` command or `osmconvert --csv-headline --csv 'wikidata wikipedia'`.
+        /// If `@id`, `@version`, and `@otype` or `@oname` columns are present, they will be added to the output for additional context.
         #[arg(value_name = "FILE.tsv")]
         osm_tags: PathBuf,
     },
@@ -128,22 +130,46 @@ fn main() -> anyhow::Result<()> {
             let mut writer = csv::WriterBuilder::new()
                 .delimiter(b'\t')
                 .from_writer(stdout().lock());
-            writer.write_record(["line", "kind", "osm_id", "error", "value"])?;
+
+            writer.write_record(["line", "object", "version", "key", "error", "value"])?;
+
             for error in errors {
                 use om_wikiparser::wm::ParseErrorKind::*;
-                let kind = error.kind.to_string();
-                let id = error
+                let key = match error.kind {
+                    Title(_) => "wikipedia",
+                    Qid(_) => "wikidata",
+                    Tsv(_) => "",
+                };
+
+                // Url or id.
+                let object = error
                     .osm_id
-                    .as_ref()
-                    .map(ToString::to_string)
+                    .map(|id| {
+                        error
+                            .osm_type
+                            .and_then(|obj| osm::make_url(obj, id))
+                            .unwrap_or_else(|| id.to_string())
+                    })
                     .unwrap_or_default();
+
+                let version = error.osm_version.map(|v| v.to_string()).unwrap_or_default();
+
+                // Capture error chain.
                 let e: anyhow::Error = match error.kind {
                     Title(e) => e.into(),
                     Qid(e) => e.into(),
                     Tsv(e) => e.into(),
                 };
-                let msg = e.to_string();
-                writer.write_record([&error.line.to_string(), &kind, &id, &msg, &error.text])?;
+                let msg = format!("{:#}", e);
+
+                writer.write_record([
+                    &error.line.to_string(),
+                    &object,
+                    &version,
+                    key,
+                    &msg,
+                    &error.text,
+                ])?;
             }
 
             Ok(())
