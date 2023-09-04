@@ -8,7 +8,7 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
-    html,
+    html::{self, HtmlError},
     wm::{parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file, Page, Title},
 };
 
@@ -269,7 +269,7 @@ fn write(
     redirects: impl IntoIterator<Item = Title>,
     simplify: bool,
 ) -> anyhow::Result<()> {
-    let article_dir = create_article_dir(base, page, redirects)?;
+    let article_dir = create_article_dir(&base, page, redirects)?;
 
     // Write html to determined file.
     let mut filename = article_dir;
@@ -283,7 +283,27 @@ fn write(
     }
 
     let html = if simplify {
-        html::simplify(&page.article_body.html, &page.in_language.identifier)
+        match html::simplify(&page.article_body.html, &page.in_language.identifier) {
+            Ok(html) => html,
+            Err(HtmlError::Panic(msg)) => {
+                // Write original article text to disk
+                let mut error_file = base.as_ref().to_path_buf();
+                error_file.push("errors");
+                if !error_file.exists() {
+                    fs::create_dir(&error_file).context("creating error directory")?;
+                }
+                error_file.push(page.name.replace('/', "%2F"));
+                error_file.set_extension("html");
+
+                fs::write(&error_file, &page.article_body.html).context("writing error file")?;
+
+                if !msg.is_empty() {
+                    bail!("panic occurred while processing html (saved to {error_file:?}): {msg}");
+                } else {
+                    bail!("panic occurred while processing html (saved to {error_file:?})");
+                }
+            }
+        }
     } else {
         page.article_body.html.to_string()
     };

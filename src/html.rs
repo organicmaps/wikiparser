@@ -1,4 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    any::Any,
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    ops::Deref,
+    panic,
+};
 
 use ego_tree::NodeId;
 use markup5ever::{LocalName, Namespace, QualName};
@@ -78,10 +85,13 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
     .unwrap()
 });
 
-pub fn simplify(html: &str, lang: &str) -> String {
-    let mut document = Html::parse_document(html);
-    simplify_html(&mut document, lang);
-    document.html()
+pub fn simplify(html: &str, lang: &str) -> Result<String, HtmlError> {
+    panic::catch_unwind(|| {
+        let mut document = Html::parse_document(html);
+        simplify_html(&mut document, lang);
+        Ok(document.html())
+    })
+    .map_err(PanicMsg::new)?
 }
 
 pub fn simplify_html(document: &mut Html, lang: &str) {
@@ -327,6 +337,44 @@ fn expand_id(document: &mut Html, id: NodeId) {
     }
 
     node.detach();
+}
+
+#[derive(Debug)]
+pub struct PanicMsg(Cow<'static, str>);
+
+impl PanicMsg {
+    pub fn new(payload: Box<dyn Any + Send + 'static>) -> Self {
+        let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+            Some(Cow::Borrowed(*s))
+        } else {
+            payload.downcast::<String>().ok().map(|s| Cow::Owned(*s))
+        };
+
+        Self(msg.unwrap_or_default())
+    }
+}
+
+impl Display for PanicMsg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for PanicMsg {}
+
+impl Deref for PanicMsg {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum HtmlError {
+    /// Processing this HTML caused a panic in an underlying library
+    #[error("panicked while processing html")]
+    Panic(#[from] PanicMsg),
 }
 
 #[cfg(test)]
