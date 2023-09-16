@@ -101,7 +101,9 @@ log "Extracting tags from '$OSM_FILE'"
 "$wikiparser" get-tags "$OSM_FILE" > osm_tags.tsv
 
 # Enable backtraces in errors and panics.
-export RUST_BACKTRACE=1
+# NOTE: Backtraces are still printed for panics that are caught higher in the stack.
+# export RUST_BACKTRACE=1
+
 # Set log level.
 export RUST_LOG=om_wikiparser=info
 
