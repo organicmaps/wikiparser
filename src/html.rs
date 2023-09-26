@@ -117,7 +117,9 @@ fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
     let mut to_remove = Vec::new();
 
     for header in document.select(&HEADERS) {
-        let Some(parent) = header.parent() else { continue; };
+        let Some(parent) = header.parent() else {
+            continue;
+        };
 
         if !parent
             .value()
@@ -131,7 +133,7 @@ fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
 
         // TODO: Should this join all text nodes?
         let Some(title) = header.text().next() else {
-            continue
+            continue;
         };
 
         if !titles.contains(title) {
@@ -219,7 +221,9 @@ fn remove_empty(document: &mut Html) {
 fn remove_empty_sections(document: &mut Html) {
     let mut to_remove = Vec::new();
     for el in document.select(&HEADERS) {
-        let Some(parent) = el.parent() else { continue; };
+        let Some(parent) = el.parent() else {
+            continue;
+        };
 
         if !parent
             .value()
@@ -307,7 +311,9 @@ fn is_empty_or_whitespace(el: &ElementRef) -> bool {
 
 /// Remove an element, leaving any children in its place.
 fn expand_id(document: &mut Html, id: NodeId) {
-    let Some(mut node) = document.tree.get_mut(id) else { return };
+    let Some(mut node) = document.tree.get_mut(id) else {
+        return;
+    };
     if node.parent().is_none() {
         // Already detached.
         return;

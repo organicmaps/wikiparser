@@ -26,7 +26,9 @@ pub fn run(pbf: impl Read + Send) -> anyhow::Result<()> {
         .par_bridge()
         .try_for_each(move |blob| -> anyhow::Result<()> {
             // Based on `osmpbf` implementation of `ElementReader`.
-            let BlobDecode::OsmData(block) = blob?.decode()? else { return Ok(()) };
+            let BlobDecode::OsmData(block) = blob?.decode()? else {
+                return Ok(());
+            };
             for record in block.elements().filter_map(extract_tags) {
                 send.send(record)?;
             }
