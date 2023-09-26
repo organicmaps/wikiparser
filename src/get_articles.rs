@@ -304,6 +304,7 @@ fn write(
                     bail!("panic occurred while processing html (saved to {error_file:?})");
                 }
             }
+            Err(e) => bail!(e),
         }
     } else {
         page.article_body.html.to_string()
