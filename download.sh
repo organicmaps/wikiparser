@@ -9,8 +9,8 @@ Arguments:
                 the latest complete dump subdirectory, if it exists.
 
 Options:
-    -h          Print this help screen
-    -D          Delete all old dump subdirectories if the latest is downloaded
+    -h          Print this help screen.
+    -D          Delete all old dump subdirectories if the latest is downloaded.
     -c <NUM>    Number of concurrent downloads to allow. Ignored if wget2 is not
                 present or MIRROR is not set. Defaults to 2.
 
@@ -26,7 +26,7 @@ Environment Variables:
                 For example: MIRROR=https://mirror.accum.se/mirror/wikimedia.org
 
 Exit codes:
-    0   The lastest dumps are already present or were downloaded successfully.
+    0   The latest dumps are already present or were downloaded successfully.
     1   Argument error.
     16  Some of languages were not available to download. The latest dump may
         be in progress, some of the specified languages may not exist, or the
