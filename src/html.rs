@@ -15,6 +15,7 @@ use serde::Deserialize;
 
 mod pretty;
 pub use pretty::pretty_print;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 struct Config<'a> {
@@ -88,10 +89,72 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
 pub fn simplify(html: &str, lang: &str) -> Result<String, HtmlError> {
     panic::catch_unwind(|| {
         let mut document = Html::parse_document(html);
+        if let Some(redirect) = detect_redirect(&document) {
+            return Err(HtmlError::Redirect(redirect.to_owned()));
+        }
         simplify_html(&mut document, lang);
+        if !has_text(&document) {
+            return Err(HtmlError::NoText);
+        }
         Ok(document.html())
     })
     .map_err(PanicMsg::new)?
+}
+
+/// Attempt to find target title of the article if it is a redirect.
+pub fn detect_redirect(document: &Html) -> Option<&str> {
+    static REDIRECT: Lazy<Selector> =
+        Lazy::new(|| Selector::parse(r#"link[rel="mw:PageProp/redirect"]"#).unwrap());
+
+    document.select(&REDIRECT).next().map(|el| {
+        let href = el.value().attr("href").unwrap_or_default().trim();
+        let redirect = href.strip_prefix("./").unwrap_or(href);
+        redirect
+    })
+}
+
+/// Attempt to find the wikipedia language of the article.
+pub fn detect_lang(document: &Html) -> Option<String> {
+    static BASE: Lazy<Selector> = Lazy::new(|| Selector::parse("head > base[href]").unwrap());
+
+    document
+        .select(&BASE)
+        .next()
+        .and_then(|el| el.value().attr("href"))
+        .and_then(|url| {
+            let mut url = url.to_owned();
+            if url.starts_with("//") {
+                url.insert_str(0, "http:");
+            }
+
+            match Url::parse(&url) {
+                Err(e) => {
+                    trace!("Error parsing base lang url: {}", e);
+                    None
+                }
+                Ok(url) => {
+                    let domain = url.domain()?;
+                    let (lang, domain) = domain.split_once('.')?;
+                    if domain != "wikipedia.org" {
+                        trace!("Domain of base lang url is not wikipedia.org: {}", domain);
+                    }
+                    Some(lang.to_owned())
+                }
+            }
+        })
+}
+
+pub fn has_text(document: &Html) -> bool {
+    if let Some(root) = ElementRef::wrap(document.tree.root()) {
+        !is_empty_or_whitespace(&root)
+    } else {
+        !document
+            .tree
+            .root()
+            .children()
+            .filter_map(ElementRef::wrap)
+            .all(|el| is_empty_or_whitespace(&el))
+    }
 }
 
 pub fn simplify_html(document: &mut Html, lang: &str) {
@@ -339,7 +402,7 @@ fn expand_id(document: &mut Html, id: NodeId) {
     node.detach();
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PanicMsg(Cow<'static, str>);
 
 impl PanicMsg {
@@ -370,11 +433,15 @@ impl Deref for PanicMsg {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum HtmlError {
     /// Processing this HTML caused a panic in an underlying library
     #[error("panicked while processing html")]
     Panic(#[from] PanicMsg),
+    #[error("page is redirect stub for {0:?}")]
+    Redirect(String),
+    #[error("page has no text after processing")]
+    NoText,
 }
 
 #[cfg(test)]
