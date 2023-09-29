@@ -53,23 +53,30 @@ fi
 BUILD_DIR=$(readlink -f -- "$1")
 shift
 if [ ! -d "$BUILD_DIR" ]; then
-    echo "BUILD_DIR '$BUILD_DIR' does not exist or is not a directory" >&2
+    echo "BUILD_DIR does not exist or is not a directory: '$BUILD_DIR'" >&2
     exit 1
 fi
 
 OSM_FILE=$(readlink -f -- "$1")
 shift
 if [ ! -f "$OSM_FILE" ]; then
-    echo "OSM_FILE '$OSM_FILE' does not exist or is not a file" >&2
+    echo "OSM_FILE does not exist or is not a file: '$OSM_FILE'" >&2
     exit 1
+fi
+
+if [ "${OSM_FILE: -4}" != ".pbf" ]; then
+    echo "WARN: OSM_FILE does not end in .pbf: '$OSM_FILE'" >&2
 fi
 
 DUMP_FILES=()
 while (( $# > 0 )); do
     dump_file="$(readlink -f -- "$1")"
     if [ ! -f "$dump_file" ]; then
-        echo "DUMP_FILE '$dump_file' does not exist or is not a file" >&2
+        echo "DUMP_FILE does not exist or is not a file: '$dump_file'" >&2
         exit 1
+    fi
+    if [ "${dump_file: -12}" != ".json.tar.gz" ]; then
+        echo "WARN: DUMP_FILE does not end in .json.tar.gz: '$dump_file'" >&2
     fi
     DUMP_FILES+=("$dump_file")
     shift

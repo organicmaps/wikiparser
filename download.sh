@@ -79,7 +79,7 @@ if [ -n "${1:-}" ]; then
 fi
 
 if [ ! -d "$DUMP_DIR" ]; then
-    echo "DUMP_DIR '$DUMP_DIR' does not exist" >&2
+    echo "DUMP_DIR does not exist: '$DUMP_DIR'" >&2
     exit 1
 fi
 
