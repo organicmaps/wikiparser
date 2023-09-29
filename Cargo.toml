@@ -29,5 +29,4 @@ url = "2.3.1"
 urlencoding = "2.1.2"
 
 [profile.release]
-debug = true
 overflow-checks = true
