@@ -270,19 +270,6 @@ fn write(
     redirects: impl IntoIterator<Item = Title>,
     simplify: bool,
 ) -> anyhow::Result<()> {
-    let article_dir = create_article_dir(&base, page, redirects)?;
-
-    // Write html to determined file.
-    let mut filename = article_dir;
-    filename.push(&page.in_language.identifier);
-    filename.set_extension("html");
-
-    debug!("{:?}: {:?}", page.name, filename);
-
-    if filename.exists() {
-        debug!("Overwriting existing file");
-    }
-
     let html = if simplify {
         match html::simplify(&page.article_body.html, &page.in_language.identifier) {
             Ok(html) => html,
@@ -309,6 +296,19 @@ fn write(
     } else {
         page.article_body.html.to_string()
     };
+
+    let article_dir = create_article_dir(&base, page, redirects)?;
+
+    // Write html to determined file.
+    let mut filename = article_dir;
+    filename.push(&page.in_language.identifier);
+    filename.set_extension("html");
+
+    debug!("{:?}: {:?}", page.name, filename);
+
+    if filename.exists() {
+        debug!("Overwriting existing file");
+    }
 
     let mut file =
         File::create(&filename).with_context(|| format!("creating html file {:?}", filename))?;
