@@ -360,7 +360,8 @@ fn remove_attrs(document: &mut Html) {
 fn final_expansions(document: &mut Html) {
     let mut to_expand = Vec::new();
     for el in document
-        .root_element()
+        .tree
+        .root()
         .descendants()
         .filter_map(ElementRef::wrap)
     {
