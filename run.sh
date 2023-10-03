@@ -18,6 +18,7 @@ Arguments:
 
 Options:
     -h      Print this help screen
+    -c      Use existing version of tag file if newer than the planet dump.
 
 1. Builds wikiparser.
 2. Extracts wikidata qids and wikipedia urls from OpenStreetMap pbf file (NOTE: this spawns as many threads as there are cores).
@@ -33,10 +34,12 @@ set -euo pipefail
 # set -x
 
 # Parse options.
-while getopts "h" opt
+USE_CACHED=false
+while getopts "hc" opt
 do
     case $opt in
     h)  echo -n "$USAGE"; exit 0;;
+    c)  USE_CACHED=true;;
     ?)  echo "$USAGE" | head -n1 >&2; exit 1;;
     esac
 done
@@ -104,11 +107,17 @@ wikiparser=$(pwd)/target/release/om-wikiparser
 log "Changing to maps build dir '$BUILD_DIR'"
 cd "$BUILD_DIR"
 
-log "Extracting tags from '$OSM_FILE'"
-"$wikiparser" get-tags "$OSM_FILE" > osm_tags.tsv
+TAG_FILE=osm_tags.tsv
+if [ $USE_CACHED != true ] || [ "$OSM_FILE" -nt "$TAG_FILE" ]; then
+    log "Extracting tags from '$OSM_FILE'"
+    "$wikiparser" get-tags "$OSM_FILE" > "$TAG_FILE"
+fi
 
-log "Writing tag parse errors to $BUILD_DIR/osm_tags_errors.tsv"
-"$wikiparser" check-tags osm_tags.tsv > osm_tags_errors.tsv
+TAG_ERROR_FILE=osm_tags_errors.tsv
+if [ $USE_CACHED != true ] || [ "$TAG_FILE" -nt "$TAG_ERROR_FILE" ]; then
+    log "Writing tag parse errors to $BUILD_DIR/$TAG_ERROR_FILE"
+    "$wikiparser" check-tags "$TAG_FILE" > "$TAG_ERROR_FILE"
+fi
 
 # Enable backtraces in errors and panics.
 # NOTE: Backtraces are still printed for panics that are caught higher in the stack.
