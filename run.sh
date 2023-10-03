@@ -139,9 +139,28 @@ kill_jobs() {
         log "Killing background jobs"
         # shellcheck disable=SC2086 # PIDs are intentionally expanded.
         kill $pids
-        log "Waiting for background jobs to stop"
         wait
     fi
+}
+
+# Exit early with error if any jobs fail.
+watch_jobs() {
+    # Must be provided, calling `jobs` clears any failed jobs from returning with `wait -n`.
+    num_jobs="$1"
+    if [ 0 -ge "$num_jobs" ]; then
+        echo "num_jobs is not a positive integer: '$num_jobs'" >&2
+        exit 1
+    fi
+
+    for ((i=1; i <= num_jobs; i++)); do
+        if wait -n; then
+            : # Cannot use `! wait -n`, it changes the exit code.
+        else
+            status=$?
+            log "ERROR: job failed with exit code $status"
+            exit $status
+        fi
+    done
 }
 
 trap 'kill_jobs' SIGINT SIGTERM EXIT
@@ -154,7 +173,7 @@ for dump in "${DUMP_FILES[@]}"; do
     "$OUTPUT_DIR" &
 done
 
-wait
+watch_jobs "${#DUMP_FILES[@]}"
 
 log "Beginning extraction of discovered QIDs"
 
@@ -165,6 +184,6 @@ for dump in "${DUMP_FILES[@]}"; do
     "$OUTPUT_DIR" &
 done
 
-wait
+watch_jobs "${#DUMP_FILES[@]}"
 
 log "Finished"
