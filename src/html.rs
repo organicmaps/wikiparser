@@ -326,10 +326,26 @@ fn remove_empty_sections(document: &mut Html) {
 }
 
 fn remove_attrs(document: &mut Html) {
-    // TODO: See if finding and skipping detached nodes is significantly faster.
     let mut to_remove = Vec::new();
-    for node in document.tree.values_mut() {
-        let Node::Element(el) = node else { continue };
+
+    let all_elements: Vec<_> = document
+        .tree
+        .root()
+        .descendants()
+        .filter_map(ElementRef::wrap)
+        .map(|el| el.id())
+        .collect();
+
+    trace!("Removing attributes on {} elements", all_elements.len());
+
+    for id in all_elements {
+        let Some(mut node) = document.tree.get_mut(id) else {
+            trace!("Invalid id: {:?}", id);
+            continue;
+        };
+        let Node::Element(el) = node.value() else {
+            continue;
+        };
 
         if el.name() == "span" {
             for attr in ["style", "class"]
