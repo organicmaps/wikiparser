@@ -86,17 +86,24 @@ static ELEMENT_DENY_LIST: Lazy<Selector> = Lazy::new(|| {
     .unwrap()
 });
 
-pub fn simplify(html: &str, lang: &str) -> Result<String, HtmlError> {
+/// Convenience wrapper around [[process]].
+pub fn process_str(html: &str, lang: &str) -> Result<String, HtmlError> {
+    let document = Html::parse_document(html);
+    let document = process(document, lang)?;
+    Ok(document.html())
+}
+
+/// Simplify an article, checking for bad pages and failures.
+pub fn process(mut document: Html, lang: &str) -> Result<Html, HtmlError> {
     panic::catch_unwind(|| {
-        let mut document = Html::parse_document(html);
         if let Some(redirect) = detect_redirect(&document) {
             return Err(HtmlError::Redirect(redirect.to_owned()));
         }
-        simplify_html(&mut document, lang);
+        simplify(&mut document, lang);
         if !has_text(&document) {
             return Err(HtmlError::NoText);
         }
-        Ok(document.html())
+        Ok(document)
     })
     .map_err(PanicMsg::new)?
 }
@@ -144,6 +151,7 @@ pub fn detect_lang(document: &Html) -> Option<String> {
         })
 }
 
+/// Check if the html contains any non-whitespace text nodes.
 pub fn has_text(document: &Html) -> bool {
     if let Some(root) = ElementRef::wrap(document.tree.root()) {
         !is_empty_or_whitespace(&root)
@@ -157,7 +165,16 @@ pub fn has_text(document: &Html) -> bool {
     }
 }
 
-pub fn simplify_html(document: &mut Html, lang: &str) {
+/// Simplify an article to only basic text.
+///
+/// # Panics
+///
+/// This modifies the HTML tree in a way that violates some assumptions of the underlying
+/// `scraper` and `ego-tree` crates and cause panics.
+///
+/// If this is undesirable, see [[process]] for a higher-level wrapper that
+/// handles panics and other errors.
+pub fn simplify(document: &mut Html, lang: &str) {
     if let Some(titles) = CONFIG.sections_to_remove.get(lang) {
         remove_sections(document, titles);
     }
@@ -419,6 +436,18 @@ fn expand_id(document: &mut Html, id: NodeId) {
     node.detach();
 }
 
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum HtmlError {
+    /// Processing this HTML caused a panic in an underlying library
+    #[error("panicked while processing html")]
+    Panic(#[from] PanicMsg),
+    #[error("page is redirect stub for {0:?}")]
+    Redirect(String),
+    #[error("page has no text after processing")]
+    NoText,
+}
+
+/// Error wrapper around panic payloads that handles static and formatted messages.
 #[derive(Debug, PartialEq)]
 pub struct PanicMsg(Cow<'static, str>);
 
@@ -448,17 +477,6 @@ impl Deref for PanicMsg {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
-}
-
-#[derive(Debug, PartialEq, thiserror::Error)]
-pub enum HtmlError {
-    /// Processing this HTML caused a panic in an underlying library
-    #[error("panicked while processing html")]
-    Panic(#[from] PanicMsg),
-    #[error("page is redirect stub for {0:?}")]
-    Redirect(String),
-    #[error("page has no text after processing")]
-    NoText,
 }
 
 #[cfg(test)]

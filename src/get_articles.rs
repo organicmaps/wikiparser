@@ -270,8 +270,10 @@ fn write(
     redirects: impl IntoIterator<Item = Title>,
     simplify: bool,
 ) -> anyhow::Result<()> {
-    let html = if simplify {
-        match html::simplify(&page.article_body.html, &page.in_language.identifier) {
+    let html = if !simplify {
+        page.article_body.html.to_string()
+    } else {
+        match html::process_str(&page.article_body.html, &page.in_language.identifier) {
             Ok(html) => html,
             Err(HtmlError::Panic(msg)) => {
                 // Write original article text to disk
@@ -293,8 +295,6 @@ fn write(
             }
             Err(e) => bail!(e),
         }
-    } else {
-        page.article_body.html.to_string()
     };
 
     let article_dir = create_article_dir(&base, page, redirects)?;
