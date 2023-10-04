@@ -174,7 +174,7 @@ fn main() -> anyhow::Result<()> {
             stdin().read_to_string(&mut input)?;
 
             let start = Instant::now();
-            let output = om_wikiparser::html::simplify(&input, &lang)?;
+            let output = om_wikiparser::html::process_str(&input, &lang)?;
             let stop = Instant::now();
             let time = stop.duration_since(start);
 

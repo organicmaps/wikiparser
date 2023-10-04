@@ -12,9 +12,9 @@ fn process_crimean_mountains(b: &mut Bencher) {
     let text = include_str!("../tests/data/Q4185820-en/original.html");
 
     // process lazy statics beforehand
-    black_box(html::simplify(text, "en"));
+    black_box(html::process_str(text, "en").unwrap());
 
     b.iter(|| {
-        black_box(html::simplify(text, "en"));
+        black_box(html::process_str(text, "en").unwrap());
     });
 }
