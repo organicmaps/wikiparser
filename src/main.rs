@@ -2,9 +2,10 @@ use std::{
     collections::HashSet,
     env,
     fs::File,
-    io::{stdin, stdout, BufReader, Read, Write},
+    io::{stderr, stdin, stdout, BufReader, Read, Write},
     num::NonZeroUsize,
     path::PathBuf,
+    process,
     str::FromStr,
     thread::available_parallelism,
     time::Instant,
@@ -12,9 +13,11 @@ use std::{
 
 use anyhow::Context;
 use clap::{CommandFactory, Parser, Subcommand};
-use om_wikiparser::osm;
 #[macro_use]
-extern crate log;
+extern crate tracing;
+use tracing_subscriber::filter::EnvFilter;
+
+use om_wikiparser::osm;
 
 mod get_articles;
 mod get_tags;
@@ -75,11 +78,12 @@ enum Cmd {
 
 fn main() -> anyhow::Result<()> {
     // Use info level by default, load overrides from `RUST_LOG` env variable.
-    // See https://docs.rs/env_logger/latest/env_logger/index.html#example
-    env_logger::Builder::new()
-        .filter_level(log::LevelFilter::Info)
-        .parse_default_env()
-        .try_init()?;
+    // See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .compact()
+        .with_writer(stderr)
+        .init();
 
     let args = Args::parse();
 
@@ -99,6 +103,9 @@ fn main() -> anyhow::Result<()> {
                 .exit()
             }
 
+            let pid = process::id();
+            let span = info_span!("", pid);
+            let _handle = span.enter();
             get_articles::run(args)
         }
         Cmd::GetTags { pbf_file, threads } => {

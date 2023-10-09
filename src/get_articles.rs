@@ -80,18 +80,8 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         if !line_errors.is_empty() {
             let error_count = line_errors.len();
             let new_items = wikidata_qids.len() + wikipedia_titles.len() - original_items;
-            let expected_threshold = 0.02;
             let percentage = 100.0 * error_count as f64 / new_items as f64;
-            let level = if percentage >= expected_threshold {
-                log::Level::Error
-            } else {
-                log::Level::Info
-            };
-
-            log!(
-                level,
-                "{error_count} errors ({percentage:.4}%) parsing osm tags from {path:?}",
-            );
+            warn!("{error_count} errors ({percentage:.4}%) parsing osm tags from {path:?}",);
         }
     }
 
@@ -118,21 +108,38 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     }
 
     info!("Processing dump");
-    let dump = stdin().lock();
+    let mut dump = stdin().lock();
 
-    // TODO: Compare different deserialization methods.
-    // The docs warn against using a reader directly, and it's slower than tar can decompress the dump.
-    // let stream = serde_json::Deserializer::from_reader(dump).into_iter::<Page>();
-    let stream = dump.lines().map(|r| {
-        r.map_err(anyhow::Error::new)
-            .and_then(|s| serde_json::from_str::<Page>(&s).map_err(anyhow::Error::new))
-    });
+    let mut buffer = String::new();
+    let mut line = 0;
+    let mut byte = 1;
+    loop {
+        line += 1;
+        byte += buffer.len();
+        buffer.clear();
 
-    for page in stream {
-        let page = page?;
+        if 0 == dump.read_line(&mut buffer).context("reading dump")? {
+            // Reached end of file.
+            break;
+        }
+
+        // TODO: Compare different deserialization methods.
+        // The docs warn against using a reader directly, and it's slower than tar can decompress the dump.
+        // let stream = serde_json::Deserializer::from_reader(dump).into_iter::<Page>();
+        let page: Page = serde_json::from_str(&buffer).context("deserializing json")?;
+
+        let span = info_span!(
+            "page",
+            lang = page.in_language.identifier,
+            title = page.name,
+            url = page.url,
+            qid = page.main_entity.as_ref().map(|w| &w.identifier),
+            line,
+            byte,
+        );
+        let _handle = span.enter();
 
         let qid = page.wikidata();
-
         let is_wikidata_match = qid
             .as_ref()
             .map(|qid| wikidata_qids.contains(qid))
@@ -144,7 +151,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
             page.all_titles()
                 .filter_map(|r| {
                     r.map(Some).unwrap_or_else(|e| {
-                        warn!("Could not parse title for {:?}: {:#}", &page.name, e);
+                        warn!("Could not parse title: {:#}", e);
                         None
                     })
                 })
@@ -159,7 +166,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         // Write matched new QIDs back to file.
         if let (Some(f), Some(qid)) = (&mut write_new_qids, &qid) {
             if !is_wikidata_match && !matching_titles.is_empty() {
-                debug!("Writing new id {} for article {:?}", qid, page.name);
+                debug!("Writing new id {}", qid);
                 // NOTE: Write to string buffer first to have a single atomic write syscall.
                 // See `write_new_qids` for more info.
                 let line = format!("{}\n", qid);
@@ -173,7 +180,7 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         }
 
         if let Err(e) = write(&args.output_dir, &page, matching_titles, !args.no_simplify) {
-            error!("Error writing article {:?}: {:#}", page.name, e);
+            error!("Error writing article: {:#}", e);
         }
     }
 
@@ -193,13 +200,13 @@ fn create_article_dir(
         None => {
             // Write to wikipedia title directory.
             // Prefer first redirect, fall back to page title if none exist
-            info!("Page without wikidata qid: {:?} ({})", page.name, page.url);
+            info!("Page without wikidata qid");
             redirects
                 .next()
                 .or_else(|| match page.title() {
                     Ok(title) => Some(title),
                     Err(e) => {
-                        warn!("Unable to parse title for page {:?}: {:#}", page.name, e);
+                        warn!("Unable to parse title: {:#}", e);
                         None
                     }
                 })
