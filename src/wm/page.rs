@@ -47,7 +47,7 @@ impl Page {
     pub fn redirects(&self) -> impl Iterator<Item = anyhow::Result<Title>> + '_ {
         self.redirects.iter().map(|r| {
             Title::from_title(&r.name, &self.in_language.identifier)
-                .with_context(|| format!("bad redirect {:?}", self.name))
+                .with_context(|| format!("bad redirect {:?}", &r.name))
         })
     }
 }
