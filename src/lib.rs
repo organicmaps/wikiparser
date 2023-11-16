@@ -41,7 +41,7 @@ pub fn parse_wikipedia_file(path: impl AsRef<OsStr>) -> anyhow::Result<HashSet<T
         .lines()
         .enumerate()
         .map(|(i, line)| {
-            Title::from_url(line).with_context(|| {
+            Title::from_osm_tag(line).with_context(|| {
                 let line_num = i + 1;
                 format!("on line {line_num}: {line:?}")
             })
