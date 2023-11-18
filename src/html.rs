@@ -340,7 +340,8 @@ fn remove_empty_sections(document: &mut Html) {
         }
 
         if el
-            .next_siblings()
+            .prev_siblings()
+            .chain(el.next_siblings())
             .filter_map(ElementRef::wrap)
             .all(|e| is_empty_or_whitespace(&e) || HEADERS.matches(&e))
         {
