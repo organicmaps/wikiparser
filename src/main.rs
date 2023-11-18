@@ -67,9 +67,9 @@ enum Cmd {
     /// Reads from stdin and writes the simplified version to stdout.
     /// This is meant for testing and debugging.
     Simplify {
-        /// The language to use when processing the article (defaults to `en`).
-        #[arg(long, default_value_t = String::from("en"))]
-        lang: String,
+        /// The language to use when processing the article (tries to detect it by default, falling back to `en`).
+        #[arg(long)]
+        lang: Option<String>,
     },
 }
 
@@ -170,11 +170,26 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Cmd::Simplify { lang } => {
+            use om_wikiparser::html;
+
             let mut input = String::new();
             stdin().read_to_string(&mut input)?;
 
+            let document = scraper::Html::parse_document(&input);
+
+            let lang = lang.unwrap_or_else(|| match html::detect_lang(&document) {
+                Some(detected) => {
+                    info!("Detected language as {detected:?}");
+                    detected
+                }
+                None => {
+                    warn!("Unable to detect language, assuming \"en\"");
+                    "en".to_string()
+                }
+            });
+
             let start = Instant::now();
-            let output = om_wikiparser::html::process_str(&input, &lang)?;
+            let output = html::process(document, &lang)?.html();
             let stop = Instant::now();
             let time = stop.duration_since(start);
 
