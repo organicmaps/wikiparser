@@ -31,3 +31,5 @@ urlencoding = "2.1.2"
 
 [profile.release]
 overflow-checks = true
+lto = true
+codegen-units = 1
