@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     env,
     fs::File,
-    io::{stderr, stdin, stdout, BufReader, Read, Write},
+    io::{stderr, stdin, stdout, BufReader, IsTerminal, Read, Write},
     num::NonZeroUsize,
     path::PathBuf,
     process,
@@ -97,6 +97,8 @@ fn main() -> anyhow::Result<()> {
                 .exit()
             }
 
+            warn_if_stdin_is_tty();
+
             let pid = process::id();
             let span = info_span!("", pid);
             let _handle = span.enter();
@@ -173,6 +175,8 @@ fn main() -> anyhow::Result<()> {
         }
         Cmd::Simplify { lang } => {
             use om_wikiparser::html;
+
+            warn_if_stdin_is_tty();
 
             let mut input = String::new();
             stdin().read_to_string(&mut input)?;
@@ -259,6 +263,12 @@ fn get_thread_count(requested: Option<isize>) -> anyhow::Result<NonZeroUsize> {
     let procs = NonZeroUsize::new(procs).unwrap_or(NonZeroUsize::new(1).unwrap());
 
     Ok(procs)
+}
+
+fn warn_if_stdin_is_tty() {
+    if stdin().is_terminal() {
+        warn!("Expecting input on stdin but it is a TTY");
+    }
 }
 
 /// Get the version returned by `git describe`, e.g.:
