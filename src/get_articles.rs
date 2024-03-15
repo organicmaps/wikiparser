@@ -1,7 +1,8 @@
 use std::{
     borrow::Cow,
+    collections::HashSet,
     fs::{self, File},
-    io::{stdin, stdout, BufRead, Write},
+    io::{stdin, stdout, BufRead, BufReader, Write},
     os::unix,
     path::{Path, PathBuf},
 };
@@ -9,6 +10,7 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
+    extend,
     html::{self, HtmlError},
     parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file,
     wm::{Page, Title},
@@ -67,34 +69,34 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> anyhow::Result<()> {
-    let mut wikipedia_titles = if let Some(path) = args.wikipedia_urls {
+    let mut wikipedia_titles = HashSet::new();
+    if let Some(path) = args.wikipedia_urls {
         info!("Loading article urls from {path:?}");
-        parse_wikipedia_file(path)?
-    } else {
-        Default::default()
-    };
+        let file = BufReader::new(File::open(path)?);
+        parse_wikipedia_file(file, &mut wikipedia_titles)?
+    }
 
-    let mut wikidata_qids = if let Some(path) = args.wikidata_qids {
+    let mut wikidata_qids = HashSet::new();
+    if let Some(path) = args.wikidata_qids {
         info!("Loading wikidata QIDs from {path:?}");
-        parse_wikidata_file(path)?
-    } else {
-        Default::default()
+        let file = BufReader::new(File::open(path)?);
+        parse_wikidata_file(file, &mut wikidata_qids)?
     };
 
     if let Some(ref path) = args.osm_tags {
         info!("Loading wikipedia/wikidata osm tags from {path:?}");
+        let file = File::open(path)?;
 
         let original_items = wikidata_qids.len() + wikipedia_titles.len();
-        let mut line_errors = Vec::new();
+        let mut error_count = 0;
         parse_osm_tag_file(
-            path,
+            file,
             &mut wikidata_qids,
             &mut wikipedia_titles,
-            Some(&mut line_errors),
+            &mut extend::from_fn(|_| error_count += 1),
         )?;
 
-        if !line_errors.is_empty() {
-            let error_count = line_errors.len();
+        if error_count != 0 {
             let new_items = wikidata_qids.len() + wikipedia_titles.len() - original_items;
             let percentage = 100.0 * error_count as f64 / new_items as f64;
             warn!("{error_count} errors ({percentage:.4}%) parsing osm tags from {path:?}",);
