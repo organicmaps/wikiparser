@@ -1,6 +1,7 @@
 use std::{
+    borrow::Cow,
     fs::{self, File},
-    io::{stdin, BufRead, Write},
+    io::{stdin, stdout, BufRead, Write},
     os::unix,
     path::{Path, PathBuf},
 };
@@ -8,10 +9,16 @@ use std::{
 use anyhow::{anyhow, bail, Context};
 
 use om_wikiparser::{
-    html::{self, HtmlError},
-    parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file,
+    html, parse_osm_tag_file, parse_wikidata_file, parse_wikipedia_file,
     wm::{Page, Title},
 };
+
+#[derive(clap::ValueEnum, Copy, Clone)]
+pub enum DumpFilter {
+    Match,
+    Error,
+    Panic, // FIXME: move panic dumping to this
+}
 
 /// Extract, filter, and simplify article HTML from Wikipedia Enterprise HTML dumps.
 ///
@@ -19,7 +26,11 @@ use om_wikiparser::{
 #[derive(clap::Args)]
 pub struct Args {
     /// Directory to write the extracted articles to.
-    pub output_dir: PathBuf,
+    #[arg(required_unless_present = "dump_json")]
+    pub output_dir: Option<PathBuf>,
+
+    #[arg(long)]
+    pub dump_json: Option<DumpFilter>,
 
     /// Path to a TSV file that contains one or more of `wikidata`, `wikipedia` columns.
     ///
@@ -103,9 +114,13 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         .map(|p| File::options().create(true).append(true).open(p))
         .transpose()?;
 
-    if !args.output_dir.is_dir() {
-        bail!("output dir {:?} does not exist", args.output_dir)
+    if let Some(output_dir) = &args.output_dir {
+        if !output_dir.is_dir() {
+            bail!("output dir {:?} does not exist", output_dir);
+        }
     }
+
+    let mut stdout = stdout();
 
     info!("Processing dump");
     let mut dump = stdin().lock();
@@ -179,8 +194,31 @@ pub fn run(args: Args) -> anyhow::Result<()> {
             }
         }
 
-        if let Err(e) = write(&args.output_dir, &page, matching_titles, !args.no_simplify) {
-            error!("Error writing article: {:#}", e);
+        // Always write regardless of later errors.
+        if let Some(DumpFilter::Match) = args.dump_json {
+            stdout.write_all(buffer.as_bytes())?;
+        }
+
+        let article_output = if args.no_simplify {
+            Ok(Cow::Borrowed(&page.article_body.html))
+        } else {
+            html::process_str(&page.article_body.html, &page.in_language.identifier).map(Cow::Owned)
+        };
+
+        match article_output {
+            Err(e) => {
+                error!("Error processing article: {:#}", e);
+                if let Some(DumpFilter::Error) = args.dump_json {
+                    stdout.write_all(buffer.as_bytes())?;
+                }
+            }
+            Ok(html) => {
+                if let Some(output_dir) = args.output_dir.as_ref() {
+                    if let Err(e) = write(output_dir, &page, matching_titles, &html) {
+                        error!("Error writing article: {:#}", e);
+                    }
+                }
+            }
         }
     }
 
@@ -275,35 +313,8 @@ fn write(
     base: impl AsRef<Path>,
     page: &Page,
     redirects: impl IntoIterator<Item = Title>,
-    simplify: bool,
+    html: &str,
 ) -> anyhow::Result<()> {
-    let html = if !simplify {
-        page.article_body.html.to_string()
-    } else {
-        match html::process_str(&page.article_body.html, &page.in_language.identifier) {
-            Ok(html) => html,
-            Err(HtmlError::Panic(msg)) => {
-                // Write original article text to disk
-                let mut error_file = base.as_ref().to_path_buf();
-                error_file.push("errors");
-                if !error_file.exists() {
-                    fs::create_dir(&error_file).context("creating error directory")?;
-                }
-                error_file.push(page.name.replace('/', "%2F"));
-                error_file.set_extension("html");
-
-                fs::write(&error_file, &page.article_body.html).context("writing error file")?;
-
-                if !msg.is_empty() {
-                    bail!("panic occurred while processing html (saved to {error_file:?}): {msg}");
-                } else {
-                    bail!("panic occurred while processing html (saved to {error_file:?})");
-                }
-            }
-            Err(e) => bail!(e),
-        }
-    };
-
     let article_dir = create_article_dir(&base, page, redirects)?;
 
     // Write html to determined file.
@@ -311,11 +322,11 @@ fn write(
     filename.push(&page.in_language.identifier);
     filename.set_extension("html");
 
-    debug!("{:?}: {:?}", page.name, filename);
-
-    if filename.exists() {
-        debug!("Overwriting existing file");
-    }
+    debug!(
+        file = filename.to_string_lossy().as_ref(),
+        exists = filename.exists(),
+        "Writing article"
+    );
 
     let mut file =
         File::create(&filename).with_context(|| format!("creating html file {:?}", filename))?;

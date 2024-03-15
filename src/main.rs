@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     env,
     fs::File,
-    io::{stderr, stdin, stdout, BufReader, Read, Write},
+    io::{stderr, stdin, stdout, BufReader, IsTerminal, Read, Write},
     num::NonZeroUsize,
     path::PathBuf,
     process,
@@ -79,11 +79,20 @@ enum Cmd {
 fn main() -> anyhow::Result<()> {
     // Use info level by default, load overrides from `RUST_LOG` env variable.
     // See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
-    tracing_subscriber::fmt()
+    let subscriber = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
-        .compact()
-        .with_writer(stderr)
-        .init();
+        .with_writer(stderr);
+
+    if stderr().is_terminal() {
+        subscriber.compact().init();
+    } else {
+        subscriber
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(true)
+            .init();
+    }
 
     let args = Args::parse();
 

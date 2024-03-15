@@ -151,6 +151,15 @@ pub fn detect_lang(document: &Html) -> Option<String> {
         })
 }
 
+/// Get the `title` element.
+pub fn get_title(document: &Html) -> Option<&str> {
+    static TITLE: Lazy<Selector> = Lazy::new(|| Selector::parse("head > title").unwrap());
+    document
+        .select(&TITLE)
+        .next()
+        .and_then(|el| el.text().next())
+}
+
 /// Check if the html contains any non-whitespace text nodes.
 pub fn has_text(document: &Html) -> bool {
     if let Some(root) = ElementRef::wrap(document.tree.root()) {
