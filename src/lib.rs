@@ -1,57 +1,52 @@
-use std::{collections::HashSet, ffi::OsStr, fs, str::FromStr};
+use std::{
+    io::{self, BufRead},
+    str::FromStr,
+};
 
 #[macro_use]
 extern crate log;
-use anyhow::Context;
 
 pub mod html;
 pub mod osm;
 mod tag_file;
 pub use tag_file::*;
+pub mod extend;
 pub mod wm;
 
 use wm::{Qid, Title};
 
 /// Read from a file of urls on each line.
-pub fn parse_wikidata_file(path: impl AsRef<OsStr>) -> anyhow::Result<HashSet<Qid>> {
-    let contents = fs::read_to_string(path.as_ref())?;
-    Ok(contents
-        .lines()
-        .enumerate()
-        .map(|(i, line)| {
-            Qid::from_str(line).with_context(|| {
-                let line_num = i + 1;
-                format!("on line {line_num}: {line:?}")
-            })
-        })
-        .filter_map(|r| match r {
-            Ok(qid) => Some(qid),
+pub fn parse_wikidata_file(r: impl BufRead, collection: &mut impl Extend<Qid>) -> io::Result<()> {
+    for (i, line) in r.lines().enumerate() {
+        let line = line?;
+        match Qid::from_str(&line) {
+            Ok(qid) => collection.extend(Some(qid)),
             Err(e) => {
-                warn!("Could not parse QID: {:#}", e);
-                None
+                let line_num = i + 1;
+                warn!("Could not parse QID: on line {line_num}: {line:?}: {:#}", e);
             }
-        })
-        .collect())
+        }
+    }
+    Ok(())
 }
 
 /// Read article titles from a file of urls on each line.
-pub fn parse_wikipedia_file(path: impl AsRef<OsStr>) -> anyhow::Result<HashSet<Title>> {
-    let contents = fs::read_to_string(path.as_ref())?;
-    Ok(contents
-        .lines()
-        .enumerate()
-        .map(|(i, line)| {
-            Title::from_osm_tag(line).with_context(|| {
-                let line_num = i + 1;
-                format!("on line {line_num}: {line:?}")
-            })
-        })
-        .filter_map(|r| match r {
-            Ok(qid) => Some(qid),
+pub fn parse_wikipedia_file(
+    r: impl BufRead,
+    collection: &mut impl Extend<Title>,
+) -> io::Result<()> {
+    for (i, line) in r.lines().enumerate() {
+        let line = line?;
+        match Title::from_osm_tag(&line) {
+            Ok(title) => collection.extend(Some(title)),
             Err(e) => {
-                warn!("Could not parse wikipedia title: {:#}", e);
-                None
+                let line_num = i + 1;
+                warn!(
+                    "Could not parse wikipedia title: on line {line_num}: {line:?}: {:#}",
+                    e
+                );
             }
-        })
-        .collect())
+        }
+    }
+    Ok(())
 }

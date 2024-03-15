@@ -120,7 +120,8 @@ fn main() -> anyhow::Result<()> {
             let mut titles = HashSet::new();
             let mut errors = Vec::new();
             info!("Reading osm tag file");
-            om_wikiparser::parse_osm_tag_file(osm_tags, &mut qids, &mut titles, Some(&mut errors))?;
+            let file = File::open(osm_tags)?;
+            om_wikiparser::parse_osm_tag_file(file, &mut qids, &mut titles, &mut errors)?;
             info!("Found {} errors in tag file", errors.len());
 
             let mut writer = csv::WriterBuilder::new()

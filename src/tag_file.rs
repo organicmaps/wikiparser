@@ -1,4 +1,4 @@
-use std::{collections::HashSet, error::Error, ffi::OsStr, fmt::Display, str::FromStr};
+use std::{error::Error, fmt::Display, io::Read, str::FromStr};
 
 use anyhow::{anyhow, bail};
 
@@ -9,19 +9,15 @@ use crate::{
 
 /// Read a TSV file of OSM tags, using wikipedia/wikidata tags.
 pub fn parse_osm_tag_file(
-    path: impl AsRef<OsStr>,
-    qids: &mut HashSet<Qid>,
-    titles: &mut HashSet<Title>,
-    mut line_errors: Option<&mut Vec<ParseLineError>>,
+    r: impl Read,
+    qids: &mut impl Extend<Qid>,
+    titles: &mut impl Extend<Title>,
+    line_errors: &mut impl Extend<ParseLineError>,
 ) -> anyhow::Result<()> {
-    let path = path.as_ref();
-    let mut rdr = csv::ReaderBuilder::new().delimiter(b'\t').from_path(path)?;
+    let mut rdr = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(r);
 
     let mut push_error = |e: ParseLineError| {
-        debug!("Tag parse error: {e}");
-        if let Some(ref mut errs) = line_errors {
-            errs.push(e);
-        }
+        line_errors.extend(Some(e));
     };
 
     let mut qid_col = None;
@@ -84,7 +80,7 @@ pub fn parse_osm_tag_file(
         if !qid.is_empty() {
             match Qid::from_str(qid) {
                 Ok(qid) => {
-                    qids.insert(qid);
+                    qids.extend(Some(qid));
                 }
                 Err(e) => {
                     let (osm_id, osm_type, osm_version) = parse_metadata();
@@ -104,7 +100,7 @@ pub fn parse_osm_tag_file(
         if !title.is_empty() {
             match Title::from_osm_tag(title) {
                 Ok(title) => {
-                    titles.insert(title);
+                    titles.extend(Some(title));
                 }
                 Err(e) => {
                     let (osm_id, osm_type, osm_version) = parse_metadata();
