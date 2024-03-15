@@ -15,7 +15,7 @@ use anyhow::Context;
 use clap::{CommandFactory, Parser, Subcommand};
 #[macro_use]
 extern crate tracing;
-use tracing_subscriber::filter::EnvFilter;
+use tracing_subscriber::{filter::EnvFilter, Layer};
 
 use om_wikiparser::osm;
 
@@ -77,13 +77,7 @@ enum Cmd {
 }
 
 fn main() -> anyhow::Result<()> {
-    // Use info level by default, load overrides from `RUST_LOG` env variable.
-    // See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .compact()
-        .with_writer(stderr)
-        .init();
+    init_logger();
 
     let args = Args::parse();
 
@@ -213,6 +207,23 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
     }
+}
+
+fn init_logger() {
+    use tracing::dispatcher::{self, Dispatch};
+    use tracing_subscriber::{layer::SubscriberExt, Registry};
+
+    let subscriber = Registry::default().with(
+        tracing_logfmt::builder()
+            .layer()
+            .with_writer(stderr)
+            // Use info level by default, load overrides from `RUST_LOG` env variable.
+            // See https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html
+            .with_filter(EnvFilter::from_default_env()),
+    );
+
+    dispatcher::set_global_default(Dispatch::new(subscriber))
+        .expect("Global logger has already been set!");
 }
 
 /// Determine the number of threads to use.
