@@ -42,6 +42,10 @@ static ELEMENT_ALLOW_LIST: Lazy<Selector> = Lazy::new(|| {
             // TODO: See if these are used in other ways.
             "div.excerpt-block",
             "div.excerpt",
+            // div that wraps the entire section/article content
+            // FIXME: test this on bad files
+            // "section > div:not([data-mw]):not([class])",
+            "section > div:only-child",
         ]
         .join(", "),
     )
@@ -176,7 +180,7 @@ pub fn has_text(document: &Html) -> bool {
 /// handles panics and other errors.
 pub fn simplify(document: &mut Html, lang: &str) {
     if let Some(titles) = CONFIG.sections_to_remove.get(lang) {
-        remove_sections(document, titles);
+        remove_named_header_siblings(document, titles);
     }
 
     remove_denylist_elements(document);
@@ -202,8 +206,37 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
     }
 }
 
+fn remove_named_header_siblings(document: &mut Html, titles: &BTreeSet<&str>) {
+    let mut to_remove = Vec::new();
+
+    for header in document.select(&HEADERS) {
+        // TODO: Should this join all text nodes?
+        let Some(title) = header.text().next() else {
+            continue;
+        };
+        if !titles.contains(title) {
+            continue;
+        }
+
+        to_remove.push(header.id());
+        let header_level = header.value().name();
+        trace!("Removing trailing siblings for header {header_level} {title:?}");
+        for sibling in header.next_siblings() {
+            if let Some(element) = ElementRef::wrap(sibling) {
+                if HEADERS.matches(&element) && element.value().name() <= header_level {
+                    trace!("Stopping removal early at {}", element.value().name(),);
+                    break;
+                }
+            }
+            to_remove.push(sibling.id());
+        }
+    }
+
+    remove_ids(document, to_remove.drain(..));
+}
+
 /// Remove sections with the specified `titles` and all trailing elements until next section.
-fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
+fn remove_named_sections(document: &mut Html, titles: &BTreeSet<&str>) {
     let mut to_remove = Vec::new();
 
     for header in document.select(&HEADERS) {
@@ -217,7 +250,7 @@ fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
             .map(|p| p.name() == "section")
             .unwrap_or_default()
         {
-            trace!("Skipping header without section name: {:?}", parent);
+            trace!("Skipping header without parent section: {:?}", parent);
             continue;
         }
 
@@ -326,7 +359,8 @@ fn remove_empty_sections(document: &mut Html) {
         }
 
         if el
-            .next_siblings()
+            .prev_siblings()
+            .chain(el.next_siblings())
             .filter_map(ElementRef::wrap)
             .all(|e| is_empty_or_whitespace(&e) || HEADERS.matches(&e))
         {
@@ -542,6 +576,49 @@ mod test {
         assert!(
             document.select(&inner_element).next().is_some(),
             "Link inner elements should be preserved."
+        );
+    }
+
+    #[test]
+    /// Verify trailing siblings are removed up to superheaders.
+    fn remove_headers() {
+        let html = r#"
+            <h1>Title</h1>
+                <p id="p1">Foo bar</p>
+            <h2>Section 1</h2>
+                <p id="p2">Foo bar</p>
+            <h3>Subsection</h3>
+                <p id="p3">Foo bar</p>
+            <h1>Next Title</h1>
+                <p id="p4">Foo bar</p>
+            <h2>Section 2</h2>
+                <p id="p5">Foo bar</p>
+        "#;
+
+        let paragraphs = Selector::parse("p").unwrap();
+
+        let mut document = Html::parse_fragment(html);
+
+        assert_eq!(
+            vec!["p1", "p2", "p3", "p4", "p5"],
+            document
+                .select(&paragraphs)
+                .map(|el| el.value().id().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            "paragraphs in original html are not expected"
+        );
+
+        remove_named_header_siblings(&mut document, &BTreeSet::from_iter(Some("Section 1")));
+
+        eprintln!("{}", document.html());
+
+        assert_eq!(
+            vec!["p1", "p4", "p5"],
+            document
+                .select(&paragraphs)
+                .map(|el| el.value().id().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            "only p2 and p3 should be removed"
         );
     }
 }
