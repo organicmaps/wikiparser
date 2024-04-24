@@ -214,6 +214,9 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
 }
 
 /// Remove sections with the specified `titles` and all trailing elements until next section.
+///
+/// `titles` are matched by case-sensitive simple byte comparison.
+/// `titles` should be normalized to Unicode NFC to match Wikipedia's internal normalization: <https://mediawiki.org/wiki/Unicode_normalization_considerations>.
 fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
     let mut to_remove = Vec::new();
 
@@ -507,6 +510,7 @@ mod test {
     /// text, which this does not handle.
     ///
     /// See also:
+    /// - [super::remove_sections]
     /// - Mediawiki discussion of normalization: https://mediawiki.org/wiki/Unicode_normalization_considerations
     /// - Online conversion tool: https://util.unicode.org/UnicodeJsps/transform.jsp?a=Any-NFC
     #[test]
