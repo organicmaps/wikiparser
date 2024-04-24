@@ -23,12 +23,23 @@ struct Config<'a> {
     sections_to_remove: BTreeMap<&'a str, BTreeSet<&'a str>>,
 }
 
+/// Path to the processing config file.
+///
+/// Other compile-time macros expect a string literal, so this must be a macro instead of a const str.
+macro_rules! config_path {
+    () => {
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/article_processing_config.json"
+        )
+    };
+}
+
 static CONFIG: Lazy<Config<'static>> = Lazy::new(|| {
-    serde_json::from_str(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/article_processing_config.json"
-    )))
-    .expect("\"article_processing_config.json\" is either invalid json or the wrong structure")
+    serde_json::from_str(include_str!(config_path!())).expect(concat!(
+        config_path!(),
+        " is either invalid json or the wrong structure"
+    ))
 });
 
 static HEADERS: Lazy<Selector> =
@@ -203,6 +214,9 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
 }
 
 /// Remove sections with the specified `titles` and all trailing elements until next section.
+///
+/// `titles` are matched by case-sensitive simple byte comparison.
+/// `titles` should be normalized to Unicode NFC to match Wikipedia's internal normalization: <https://mediawiki.org/wiki/Unicode_normalization_considerations>.
 fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
     let mut to_remove = Vec::new();
 
@@ -486,6 +500,37 @@ mod test {
     #[test]
     fn static_config_parses() {
         assert!(!CONFIG.sections_to_remove.is_empty());
+    }
+
+    /// Ensure config sections match Wikipedia's Unicode normalization (NFC) so
+    /// that they can be correctly compared bytewise.
+    ///
+    /// As the discussion below mentions, there is an edge-case where section
+    /// names in the article contain templates that expand to non-normalized
+    /// text, which this does not handle.
+    ///
+    /// See also:
+    /// - [super::remove_sections]
+    /// - Mediawiki discussion of normalization: https://mediawiki.org/wiki/Unicode_normalization_considerations
+    /// - Online conversion tool: https://util.unicode.org/UnicodeJsps/transform.jsp?a=Any-NFC
+    #[test]
+    fn static_config_sections_are_normalized() {
+        use unicode_normalization::{is_nfc, UnicodeNormalization};
+
+        let mut all_sections_are_normalized = true;
+        for section in CONFIG.sections_to_remove.values().flatten() {
+            if !is_nfc(section) {
+                all_sections_are_normalized = false;
+                let normalized = String::from_iter(section.nfc());
+                eprintln!("Section to remove {section:?} should be normalized to {normalized:?}");
+            }
+        }
+
+        assert!(
+            all_sections_are_normalized,
+            "Not all sections in {} are in Unicode NFC. Please replace the reported sections.",
+            config_path!()
+        );
     }
 
     fn expand_links(document: &mut Html) {
