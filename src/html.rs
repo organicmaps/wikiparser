@@ -1,3 +1,13 @@
+//! Simplification of Wikipedia Enterprise HTML.
+//!
+//! The goal is to process the [Enterprise API] HTML output similar to the [TextExtracts API](https://www.mediawiki.org/wiki/Extension:TextExtracts).
+//! In particular:
+//! - All images, media, tables, and wrapper elements like divs and sections are removed.
+//! - Doctype, comments, `html`, `body`, `head`, etc. are removed.
+//! - Only top-level headers, paragraphs, links and basic text formatting (`b`, `i`, etc.)
+//!
+//! The HTML that the TextExtracts API starts with seems to be different from the Enterprise API, which follows [this spec](https://www.mediawiki.org/wiki/Specs/HTML/) and seems to have more content and data encoded in attributes.
+
 use std::{
     any::Any,
     borrow::Cow,
@@ -187,7 +197,7 @@ pub fn has_text(document: &Html) -> bool {
 /// handles panics and other errors.
 pub fn simplify(document: &mut Html, lang: &str) {
     if let Some(titles) = CONFIG.sections_to_remove.get(lang) {
-        remove_sections(document, titles);
+        remove_named_header_siblings(document, titles);
     }
 
     remove_denylist_elements(document);
@@ -213,43 +223,34 @@ fn remove_ids(document: &mut Html, ids: impl IntoIterator<Item = NodeId>) {
     }
 }
 
-/// Remove sections with the specified `titles` and all trailing elements until next section.
+/// Remove headers with the specified `titles` and all following siblings until the next header greater or equal level.
 ///
 /// `titles` are matched by case-sensitive simple byte comparison.
 /// `titles` should be normalized to Unicode NFC to match Wikipedia's internal normalization: <https://mediawiki.org/wiki/Unicode_normalization_considerations>.
-fn remove_sections(document: &mut Html, titles: &BTreeSet<&str>) {
+fn remove_named_header_siblings(document: &mut Html, titles: &BTreeSet<&str>) {
     let mut to_remove = Vec::new();
 
     for header in document.select(&HEADERS) {
-        let Some(parent) = header.parent() else {
-            continue;
-        };
-
-        if !parent
-            .value()
-            .as_element()
-            .map(|p| p.name() == "section")
-            .unwrap_or_default()
-        {
-            trace!("Skipping header without section name: {:?}", parent);
-            continue;
-        }
-
         // TODO: Should this join all text nodes?
         let Some(title) = header.text().next() else {
             continue;
         };
-
         if !titles.contains(title) {
             continue;
         }
 
-        trace!(
-            "Removing denylisted section {} {:?}",
-            header.value().name(),
-            header.text().collect::<String>()
-        );
-        to_remove.push(parent.id());
+        to_remove.push(header.id());
+        let header_level = header.value().name();
+        trace!("Removing trailing siblings for header {header_level} {title:?}");
+        for sibling in header.next_siblings() {
+            if let Some(element) = ElementRef::wrap(sibling) {
+                if HEADERS.matches(&element) && element.value().name() <= header_level {
+                    trace!("Stopping removal early at {}", element.value().name(),);
+                    break;
+                }
+            }
+            to_remove.push(sibling.id());
+        }
     }
 
     remove_ids(document, to_remove.drain(..));
@@ -511,7 +512,7 @@ mod test {
     /// text, which this does not handle.
     ///
     /// See also:
-    /// - [super::remove_sections]
+    /// - [super::remove_named_header_siblings]
     /// - Mediawiki discussion of normalization: https://mediawiki.org/wiki/Unicode_normalization_considerations
     /// - Online conversion tool: https://util.unicode.org/UnicodeJsps/transform.jsp?a=Any-NFC
     #[test]
@@ -588,6 +589,49 @@ mod test {
         assert!(
             document.select(&inner_element).next().is_some(),
             "Link inner elements should be preserved."
+        );
+    }
+
+    #[test]
+    /// Verify trailing siblings are removed up to superheaders.
+    fn remove_headers() {
+        let html = r#"
+            <h1>Title</h1>
+                <p id="p1">Foo bar</p>
+            <h2>Section 1</h2>
+                <p id="p2">Foo bar</p>
+            <h3>Subsection</h3>
+                <p id="p3">Foo bar</p>
+            <h1>Next Title</h1>
+                <p id="p4">Foo bar</p>
+            <h2>Section 2</h2>
+                <p id="p5">Foo bar</p>
+        "#;
+
+        let paragraphs = Selector::parse("p").unwrap();
+
+        let mut document = Html::parse_fragment(html);
+
+        assert_eq!(
+            vec!["p1", "p2", "p3", "p4", "p5"],
+            document
+                .select(&paragraphs)
+                .map(|el| el.value().id().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            "paragraphs in original html are not expected"
+        );
+
+        remove_named_header_siblings(&mut document, &BTreeSet::from_iter(Some("Section 1")));
+
+        eprintln!("{}", document.html());
+
+        assert_eq!(
+            vec!["p1", "p4", "p5"],
+            document
+                .select(&paragraphs)
+                .map(|el| el.value().id().unwrap_or_default())
+                .collect::<Vec<_>>(),
+            "only p2 and p3 should be removed"
         );
     }
 }
