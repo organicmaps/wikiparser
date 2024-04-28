@@ -115,6 +115,12 @@ impl Title {
             return Err(ParseTitleError::TitleLong);
         }
 
+        // TODO: titles have a number of restrictions, including containing percent-encoded characters
+        // See <https://en.wikipedia.org/wiki/Wikipedia:Page_name#Technical_restrictions_and_limitations>
+
+        // TODO: special titles in "namespaces" start with a word and colon. They should not be linked from OSM.
+        // See <https://en.wikipedia.org/wiki/Wikipedia:Namespace>
+
         let lang = lang.trim();
         if lang.is_empty() {
             return Err(ParseTitleError::NoLang);
