@@ -23,8 +23,6 @@ use once_cell::sync::Lazy;
 use scraper::{ElementRef, Html, Node, Selector};
 use serde::Deserialize;
 
-mod pretty;
-pub use pretty::pretty_print;
 use url::Url;
 
 #[derive(Debug, Deserialize)]

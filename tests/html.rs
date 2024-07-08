@@ -3,7 +3,7 @@
 //! To update the expected output, run the test again with the env variable
 //! `UPDATE_EXPECT=1` set.
 //! See https://docs.rs/expect-test/ for more information.
-use om_wikiparser::html::{detect_lang, pretty_print, process, process_str, HtmlError};
+use om_wikiparser::html::{detect_lang, process, process_str, HtmlError};
 
 use expect_test::{expect_file, ExpectFile};
 use scraper::Html;
@@ -12,7 +12,7 @@ fn check(input: &str, expect: ExpectFile) {
     let html = Html::parse_document(input);
     let lang = detect_lang(&html).unwrap();
     let html = process(html, &lang).unwrap();
-    let processed = pretty_print(&html);
+    let processed = html.html();
 
     expect.assert_eq(&processed);
 }
