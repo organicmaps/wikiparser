@@ -202,7 +202,7 @@ pub fn simplify(document: &mut Html, lang: &str) {
 
     remove_empty_sections(document);
 
-    remove_empty(document);
+    expand_empty(document);
 
     remove_non_element_nodes(document);
 
@@ -305,7 +305,8 @@ fn remove_toplevel_whitespace(document: &mut Html) {
     remove_ids(document, to_remove.drain(..));
 }
 
-fn remove_empty(document: &mut Html) {
+/// Expand elements that contain no text or only whitespace, leaving only their contents.
+fn expand_empty(document: &mut Html) {
     let mut to_remove = Vec::new();
 
     for el in document
@@ -318,7 +319,9 @@ fn remove_empty(document: &mut Html) {
         }
     }
 
-    remove_ids(document, to_remove.drain(..));
+    for id in to_remove.drain(..) {
+        expand_id(document, id);
+    }
 }
 
 fn remove_empty_sections(document: &mut Html) {
