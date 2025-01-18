@@ -206,10 +206,26 @@ pub fn run(args: Args) -> anyhow::Result<()> {
             stdout.write_all(buffer.as_bytes())?;
         }
 
+        let html = match &page.article_body.html {
+            Some(html) => Cow::Borrowed(html),
+            None => {
+                warn!("Article without article_body.html field");
+                if let Some(filter) = args.passthrough {
+                    match filter {
+                        ArticleFilter::Error | ArticleFilter::Panic => {
+                            stdout.write_all(buffer.as_bytes())?
+                        }
+                        _ => {}
+                    }
+                }
+                continue;
+            }
+        };
+
         let article_output = if args.no_simplify {
-            Ok(Cow::Borrowed(&page.article_body.html))
+            Ok(html)
         } else {
-            html::process_str(&page.article_body.html, &page.in_language.identifier).map(Cow::Owned)
+            html::process_str(&html, &page.in_language.identifier).map(Cow::Owned)
         };
 
         match article_output {

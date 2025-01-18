@@ -61,7 +61,7 @@ pub struct Wikidata {
 pub struct ArticleBody {
     // TODO: Look into RawValue to lazily parse/allocate this:
     // https://docs.rs/serde_json/latest/serde_json/value/struct.RawValue.html
-    pub html: String,
+    pub html: Option<String>,
 }
 
 #[allow(dead_code)] // TODO: Reevaluate fields.
